@@ -1,0 +1,211 @@
+{
+  "session_id": "bicep_curls_20251225_003206",
+  "total_reps": 41,
+  "samples": [
+    {
+      "rep_number": 1,
+      "rep_start_time": 1766611932.8062599,
+      "samples": []
+    },
+    {
+      "rep_number": 2,
+      "rep_start_time": 1766611935.572364,
+      "samples": []
+    },
+    {
+      "rep_number": 3,
+      "rep_start_time": 1766611938.221291,
+      "samples": []
+    },
+    {
+      "rep_number": 4,
+      "rep_start_time": 1766611939.502891,
+      "samples": []
+    },
+    {
+      "rep_number": 5,
+      "rep_start_time": 1766611941.154645,
+      "samples": []
+    },
+    {
+      "rep_number": 6,
+      "rep_start_time": 1766611942.612062,
+      "samples": []
+    },
+    {
+      "rep_number": 7,
+      "rep_start_time": 1766611943.8707788,
+      "samples": []
+    },
+    {
+      "rep_number": 8,
+      "rep_start_time": 1766611945.124734,
+      "samples": []
+    },
+    {
+      "rep_number": 9,
+      "rep_start_time": 1766611962.409912,
+      "samples": []
+    },
+    {
+      "rep_number": 10,
+      "rep_start_time": 1766611966.370353,
+      "samples": []
+    },
+    {
+      "rep_number": 11,
+      "rep_start_time": 1766611968.311114,
+      "samples": []
+    },
+    {
+      "rep_number": 12,
+      "rep_start_time": 1766611969.787097,
+      "samples": []
+    },
+    {
+      "rep_number": 13,
+      "rep_start_time": 1766611976.520587,
+      "samples": []
+    },
+    {
+      "rep_number": 14,
+      "rep_start_time": 1766611977.7036831,
+      "samples": []
+    },
+    {
+      "rep_number": 15,
+      "rep_start_time": 1766611979.787549,
+      "samples": []
+    },
+    {
+      "rep_number": 16,
+      "rep_start_time": 1766611982.5384252,
+      "samples": []
+    },
+    {
+      "rep_number": 17,
+      "rep_start_time": 1766611983.835938,
+      "samples": []
+    },
+    {
+      "rep_number": 18,
+      "rep_start_time": 1766611984.934131,
+      "samples": []
+    },
+    {
+      "rep_number": 19,
+      "rep_start_time": 1766611987.091396,
+      "samples": []
+    },
+    {
+      "rep_number": 20,
+      "rep_start_time": 1766612003.274143,
+      "samples": []
+    },
+    {
+      "rep_number": 21,
+      "rep_start_time": 1766612005.088265,
+      "samples": []
+    },
+    {
+      "rep_number": 22,
+      "rep_start_time": 1766612006.867389,
+      "samples": []
+    },
+    {
+      "rep_number": 23,
+      "rep_start_time": 1766612008.275466,
+      "samples": []
+    },
+    {
+      "rep_number": 24,
+      "rep_start_time": 1766612009.840502,
+      "samples": []
+    },
+    {
+      "rep_number": 25,
+      "rep_start_time": 1766612018.5018198,
+      "samples": []
+    },
+    {
+      "rep_number": 26,
+      "rep_start_time": 1766612019.788322,
+      "samples": []
+    },
+    {
+      "rep_number": 27,
+      "rep_start_time": 1766612021.316882,
+      "samples": []
+    },
+    {
+      "rep_number": 28,
+      "rep_start_time": 1766612022.786297,
+      "samples": []
+    },
+    {
+      "rep_number": 29,
+      "rep_start_time": 1766612024.337514,
+      "samples": []
+    },
+    {
+      "rep_number": 30,
+      "rep_start_time": 1766612025.763289,
+      "samples": []
+    },
+    {
+      "rep_number": 31,
+      "rep_start_time": 1766612027.063615,
+      "samples": []
+    },
+    {
+      "rep_number": 32,
+      "rep_start_time": 1766612028.353394,
+      "samples": []
+    },
+    {
+      "rep_number": 33,
+      "rep_start_time": 1766612029.602018,
+      "samples": []
+    },
+    {
+      "rep_number": 34,
+      "rep_start_time": 1766612030.86399,
+      "samples": []
+    },
+    {
+      "rep_number": 35,
+      "rep_start_time": 1766612032.215931,
+      "samples": []
+    },
+    {
+      "rep_number": 36,
+      "rep_start_time": 1766612033.540767,
+      "samples": []
+    },
+    {
+      "rep_number": 37,
+      "rep_start_time": 1766612036.377252,
+      "samples": []
+    },
+    {
+      "rep_number": 38,
+      "rep_start_time": 1766612036.436727,
+      "samples": []
+    },
+    {
+      "rep_number": 39,
+      "rep_start_time": 1766612037.4405708,
+      "samples": []
+    },
+    {
+      "rep_number": 40,
+      "rep_start_time": 1766612039.210237,
+      "samples": []
+    },
+    {
+      "rep_number": 41,
+      "rep_start_time": 1766612040.556032,
+      "samples": []
+    }
+  ]
+}
