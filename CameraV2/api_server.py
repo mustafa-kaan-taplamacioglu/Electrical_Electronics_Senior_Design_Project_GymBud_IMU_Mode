@@ -395,30 +395,30 @@ class FormAnalyzer:
             # Arm lengths
             if avg[11].get('calibrated', False) and avg[13].get('calibrated', False):
                 self.upper_arm_length = np.sqrt(
-                (avg[11]['x'] - avg[13]['x'])**2 + (avg[11]['y'] - avg[13]['y'])**2
-            )
+                    (avg[11]['x'] - avg[13]['x'])**2 + (avg[11]['y'] - avg[13]['y'])**2
+                )
             else:
                 self.upper_arm_length = None
             
             if avg[13].get('calibrated', False) and avg[15].get('calibrated', False):
                 self.forearm_length = np.sqrt(
-                (avg[13]['x'] - avg[15]['x'])**2 + (avg[13]['y'] - avg[15]['y'])**2
-            )
+                    (avg[13]['x'] - avg[15]['x'])**2 + (avg[13]['y'] - avg[15]['y'])**2
+                )
             else:
                 self.forearm_length = None
             
             # Leg lengths
             if avg[23].get('calibrated', False) and avg[25].get('calibrated', False):
                 self.thigh_length = np.sqrt(
-                (avg[23]['x'] - avg[25]['x'])**2 + (avg[23]['y'] - avg[25]['y'])**2
-            )
+                    (avg[23]['x'] - avg[25]['x'])**2 + (avg[23]['y'] - avg[25]['y'])**2
+                )
             else:
                 self.thigh_length = None
             
             if avg[25].get('calibrated', False) and avg[27].get('calibrated', False):
                 self.shin_length = np.sqrt(
-                (avg[25]['x'] - avg[27]['x'])**2 + (avg[25]['y'] - avg[27]['y'])**2
-            )
+                    (avg[25]['x'] - avg[27]['x'])**2 + (avg[25]['y'] - avg[27]['y'])**2
+                )
             else:
                 self.shin_length = None
             
@@ -426,37 +426,37 @@ class FormAnalyzer:
             # Only include landmarks that were calibrated
             self.initial_positions = {}
             
-            # Shoulders
+                # Shoulders
             if avg[11].get('calibrated', False):
                 self.initial_positions['left_shoulder'] = {'x': avg[11]['x'], 'y': avg[11]['y']}
             if avg[12].get('calibrated', False):
                 self.initial_positions['right_shoulder'] = {'x': avg[12]['x'], 'y': avg[12]['y']}
             
-            # Elbows
+                # Elbows
             if avg[13].get('calibrated', False):
                 self.initial_positions['left_elbow'] = {'x': avg[13]['x'], 'y': avg[13]['y']}
             if avg[14].get('calibrated', False):
                 self.initial_positions['right_elbow'] = {'x': avg[14]['x'], 'y': avg[14]['y']}
             
-            # Wrists
+                # Wrists
             if avg[15].get('calibrated', False):
                 self.initial_positions['left_wrist'] = {'x': avg[15]['x'], 'y': avg[15]['y']}
             if avg[16].get('calibrated', False):
                 self.initial_positions['right_wrist'] = {'x': avg[16]['x'], 'y': avg[16]['y']}
             
-            # Hips
+                # Hips
             if avg[23].get('calibrated', False):
                 self.initial_positions['left_hip'] = {'x': avg[23]['x'], 'y': avg[23]['y']}
             if avg[24].get('calibrated', False):
                 self.initial_positions['right_hip'] = {'x': avg[24]['x'], 'y': avg[24]['y']}
             
-            # Knees
+                # Knees
             if avg[25].get('calibrated', False):
                 self.initial_positions['left_knee'] = {'x': avg[25]['x'], 'y': avg[25]['y']}
             if avg[26].get('calibrated', False):
                 self.initial_positions['right_knee'] = {'x': avg[26]['x'], 'y': avg[26]['y']}
             
-            # Ankles
+                # Ankles
             if avg[27].get('calibrated', False):
                 self.initial_positions['left_ankle'] = {'x': avg[27]['x'], 'y': avg[27]['y']}
             if avg[28].get('calibrated', False):
@@ -2077,7 +2077,7 @@ async def rest_countdown_task(websocket: WebSocket, session_id: int, rest_time: 
                 'state': 'tracking',
                 'message': f'Set {next_set} starting!'
             })
-            print(f"✅ Rest complete, starting Set {next_set}")
+            print(f"✅ Rest complete, starting Set {next_set} - Data collection resumed for MLTRAINCAMERA and MLTRAINIMU")
     except Exception as e:
         print(f"⚠️  Rest countdown error: {e}")
 
@@ -2713,6 +2713,9 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                 
                 elif session['state'] == 'resting':
                     # Don't process pose during rest period - handled by rest_countdown_task
+                    # This effectively pauses data collection for MLTRAINCAMERA and MLTRAINIMU
+                    # Collectors remain active (is_collecting=True) but no new data is added
+                    # Data collection will automatically resume when state returns to 'tracking'
                     continue
                 
                 elif session['state'] == 'tracking':
@@ -2809,8 +2812,8 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                         # Update last IMU sample time for throttling
                                         session['last_imu_sample_time'] = current_time
                                         
-                                        if len(session['current_rep_imu_samples']) > 200:  # Increased for longer reps at 20Hz
-                                            session['current_rep_imu_samples'].pop(0)
+                                if len(session['current_rep_imu_samples']) > 200:  # Increased for longer reps at 20Hz
+                                    session['current_rep_imu_samples'].pop(0)
                     elif session.get('dataset_collection_enabled') and dataset_collector and dataset_collector.is_collecting:
                         # Usage mode: collect to regular dataset collector with 20Hz throttling
                         last_sample_time = session.get('last_camera_sample_time')
@@ -2914,13 +2917,15 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         
                         if ml_mode == 'train':
                             # Training mode: save to separate collectors (MLTRAINCAMERA and MLTRAINIMU)
-                            rep_start_time = time.time()
+                            # Get camera rep timestamp first (will be used for both camera and IMU collectors)
+                            camera_rep_timestamp = time.time()
                             
                             # Save to camera training collector (exercise-specific)
                             camera_collector = camera_training_collectors.get(exercise)
+                            camera_rep_sample = None
                             if camera_collector and camera_collector.is_collecting:
                                 try:
-                                    camera_collector.add_rep_sample(
+                                    camera_rep_sample = camera_collector.add_rep_sample(
                                         exercise=exercise,
                                         rep_number=rep_number,
                                         landmarks_sequence=session['current_rep_landmarks'].copy(),
@@ -2931,11 +2936,14 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                         max_angle=rep_result.get('max_angle'),
                                         user_id='default'
                                     )
-                                    print(f"📹 Saved rep #{rep_number} to MLTRAINCAMERA/{exercise}/")
+                                    # Use the camera rep sample's timestamp (more accurate, matches camera data)
+                                    camera_rep_timestamp = camera_rep_sample.timestamp
+                                    print(f"📹 Saved rep #{rep_number} to MLTRAINCAMERA/{exercise}/ (timestamp: {camera_rep_timestamp})")
                                 except Exception as e:
                                     print(f"⚠️  Camera training collection error: {e}")
                             
                             # Save to IMU training collector (exercise-specific)
+                            # Use camera rep timestamp to ensure synchronization
                             imu_collector = imu_training_collectors.get(exercise)
                             if imu_collector and imu_collector.is_collecting:
                                 try:
@@ -2948,12 +2956,12 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                         imu_collector.add_rep_sequence(
                                             rep_number=rep_number,
                                             imu_sequence=imu_data_seq,
-                                            rep_start_time=rep_start_time
+                                            rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
                                         )
                                         print(f"📡 Saved rep #{rep_number} to MLTRAINIMU/{exercise}/ ({len(imu_data_seq)} IMU samples from gymbud_imu_bridge)")
                                     else:
                                         # Use session-level IMU data if rep-level is empty (fallback)
-                                        session_imu_samples = session_state.get('session_imu_samples', session.get('session_imu_samples', []))
+                                        session_imu_samples = session.get('session_imu_samples', [])
                                         # Filter session-level samples by rep_number
                                         rep_imu_samples = [s for s in session_imu_samples if s.get('rep_number') == rep_number]
                                         if len(rep_imu_samples) > 0:
@@ -2962,17 +2970,17 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                             imu_collector.add_rep_sequence(
                                                 rep_number=rep_number,
                                                 imu_sequence=rep_imu_data,
-                                                rep_start_time=rep_start_time
+                                                rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
                                             )
                                             print(f"📡 Saved rep #{rep_number} to MLTRAINIMU/{exercise}/ ({len(rep_imu_data)} IMU samples from session-level data)")
                                         else:
                                             print(f"⚠️  Rep #{rep_number}: No IMU samples found")
-                                            # Still add empty rep to maintain consistency
-                                            imu_collector.add_rep_sequence(
-                                                rep_number=rep_number,
-                                                imu_sequence=[],
-                                                rep_start_time=rep_start_time
-                                            )
+                                        # Still add empty rep to maintain consistency
+                                        imu_collector.add_rep_sequence(
+                                            rep_number=rep_number,
+                                            imu_sequence=[],
+                                                rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
+                                        )
                                     
                                     # Clear rep-level buffer after saving
                                     session['current_rep_imu_samples'] = []
@@ -3116,6 +3124,39 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 else:
                                     avg_regional_scores = {'arms': 0, 'legs': 0, 'core': 0, 'head': 0}
                                 
+                                # Generate regional feedbacks based on average regional scores
+                                # Collect all regional issues from all reps
+                                all_regional_issues = {}
+                                for rep_data in session['reps_data']:
+                                    regional_issues = rep_data.get('regional_issues', {})
+                                    for region in ['arms', 'legs', 'core', 'head']:
+                                        if region not in all_regional_issues:
+                                            all_regional_issues[region] = []
+                                        if region in regional_issues and regional_issues[region]:
+                                            all_regional_issues[region].extend(regional_issues[region])
+                                
+                                # Get most common issue per region
+                                regional_issues_summary = {}
+                                for region in ['arms', 'legs', 'core', 'head']:
+                                    if all_regional_issues.get(region):
+                                        issue_counts = {}
+                                        for issue in all_regional_issues[region]:
+                                            issue_counts[issue] = issue_counts.get(issue, 0) + 1
+                                        top_issue = max(issue_counts.items(), key=lambda x: x[1])[0] if issue_counts else None
+                                        regional_issues_summary[region] = [top_issue] if top_issue else []
+                                    else:
+                                        regional_issues_summary[region] = []
+                                
+                                # Generate regional feedback using rule-based feedback
+                                regional_feedbacks = {}
+                                for region in ['arms', 'legs', 'core', 'head']:
+                                    region_score = avg_regional_scores.get(region, 100)
+                                    region_issues = regional_issues_summary.get(region, [])
+                                    regional_feedbacks[region] = get_rule_based_regional_feedback(
+                                        exercise, region, region_score, region_issues,
+                                        rep_num=len(session['reps_data']), min_angle=None, max_angle=None
+                                    )
+                                
                                 # Send session summary
                                 summary_data = {
                                     'type': 'session_summary',
@@ -3125,6 +3166,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                         if session['reps_data'] else 0, 1
                                     ),
                                     'regional_scores': avg_regional_scores,
+                                    'regional_feedback': regional_feedbacks,  # Add regional feedback
                                     'feedback': session_feedback,
                                     'workout_complete': True,
                                     'message': 'Workout completed automatically! All sets and reps finished.'
@@ -3241,6 +3283,8 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 )
                                 
                                 # Stop tracking for now (will resume after rest)
+                                # Data collection (MLTRAINCAMERA and MLTRAINIMU) is paused during rest period
+                                # Will automatically resume when rest_countdown_task sets state back to 'tracking'
                                 response['set_complete'] = True
                         
                         # Add rep validation info to response
@@ -3371,11 +3415,11 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             # Store session IDs for later tracking
                             session['camera_session_id'] = camera_session_id
                             session['imu_session_id'] = imu_session_id
-                                
+                            
                             # Stop collectors (save_session already sets is_collecting=False for DatasetCollector)
                             if imu_collector:
                                 imu_collector.stop_session()
-                                
+                            
                             print(f"✅ Training session completed: {collected_count} reps + session-level continuous data saved to both datasets")
                             print(f"   Camera session ID: {camera_session_id}")
                             print(f"   IMU session ID: {imu_session_id}")
@@ -3430,6 +3474,39 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         session['all_issues']
                     )
                     
+                    # Generate regional feedbacks based on average regional scores
+                    # Collect all regional issues from all reps
+                    all_regional_issues = {}
+                    for rep_data in session['reps_data']:
+                        regional_issues = rep_data.get('regional_issues', {})
+                        for region in ['arms', 'legs', 'core', 'head']:
+                            if region not in all_regional_issues:
+                                all_regional_issues[region] = []
+                            if region in regional_issues and regional_issues[region]:
+                                all_regional_issues[region].extend(regional_issues[region])
+                    
+                    # Get most common issue per region
+                    regional_issues_summary = {}
+                    for region in ['arms', 'legs', 'core', 'head']:
+                        if all_regional_issues.get(region):
+                            issue_counts = {}
+                            for issue in all_regional_issues[region]:
+                                issue_counts[issue] = issue_counts.get(issue, 0) + 1
+                            top_issue = max(issue_counts.items(), key=lambda x: x[1])[0] if issue_counts else None
+                            regional_issues_summary[region] = [top_issue] if top_issue else []
+                        else:
+                            regional_issues_summary[region] = []
+                    
+                    # Generate regional feedback using rule-based feedback
+                    regional_feedbacks = {}
+                    for region in ['arms', 'legs', 'core', 'head']:
+                        region_score = avg_regional_scores.get(region, 100)
+                        region_issues = regional_issues_summary.get(region, [])
+                        regional_feedbacks[region] = get_rule_based_regional_feedback(
+                            exercise, region, region_score, region_issues,
+                            rep_num=len(session['reps_data']), min_angle=None, max_angle=None
+                    )
+                    
                     summary_data = {
                         'type': 'session_summary',
                         'total_reps': len(session['reps_data']),
@@ -3438,6 +3515,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             if session['reps_data'] else 0, 1
                         ),
                         'regional_scores': avg_regional_scores,
+                        'regional_feedback': regional_feedbacks,  # Add regional feedback
                         'feedback': session_feedback
                     }
                     print(f"📤 Sending session_summary: total_reps={summary_data['total_reps']}, avg_form={summary_data['avg_form']}, feedback_length={len(session_feedback) if session_feedback else 0}")

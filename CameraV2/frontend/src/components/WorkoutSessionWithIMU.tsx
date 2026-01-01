@@ -391,6 +391,8 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
       } else if (data.type === 'session_summary') {
         console.log('📥 Received session_summary:', data);
         console.log('   Feedback:', data.feedback);
+        console.log('   Regional scores:', data.regional_scores);
+        console.log('   Regional feedback:', data.regional_feedback);
         
         // Set feedback immediately
         if (data.feedback) {
@@ -404,6 +406,12 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
         setRepCount(data.total_reps);
         setAvgFormScore(data.avg_form || 0);
         setRegionalScores(data.regional_scores || null);
+        
+        // Set regional feedback if provided
+        if (data.regional_feedback) {
+          setRegionalFeedbacks(data.regional_feedback);
+          console.log('✅ Regional feedback set:', data.regional_feedback);
+        }
         
         // Show data collection dialog for both usage and train modes
         // Don't close WebSocket yet - we need it for training_action
@@ -1106,6 +1114,110 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
               </p>
             )}
           </div>
+
+          {/* Regional Scores and Feedback */}
+          {(regionalScores || regionalFeedbacks) && (
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '30px'
+            }}>
+              <h3 style={{ color: '#fff', fontSize: '18px', marginBottom: '15px' }}>
+                📊 Bölgesel Skorlar ve Feedback
+              </h3>
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {/* Arms */}
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  borderRadius: '8px',
+                  borderLeft: '3px solid #3b82f6'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                    <strong style={{ color: '#3b82f6', fontSize: '0.9rem' }}>💪 Kollar</strong>
+                    {regionalScores?.arms !== undefined && (
+                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {regionalScores.arms.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {regionalFeedbacks?.arms && (
+                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
+                      {regionalFeedbacks.arms}
+                    </p>
+                  )}
+                </div>
+
+                {/* Legs */}
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(168, 85, 247, 0.1)',
+                  borderRadius: '8px',
+                  borderLeft: '3px solid #a855f7'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                    <strong style={{ color: '#a855f7', fontSize: '0.9rem' }}>🦵 Bacaklar</strong>
+                    {regionalScores?.legs !== undefined && (
+                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {regionalScores.legs.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {regionalFeedbacks?.legs && (
+                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
+                      {regionalFeedbacks.legs}
+                    </p>
+                  )}
+                </div>
+
+                {/* Core */}
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(249, 115, 22, 0.1)',
+                  borderRadius: '8px',
+                  borderLeft: '3px solid #f97316'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                    <strong style={{ color: '#f97316', fontSize: '0.9rem' }}>🏋️ Gövde</strong>
+                    {regionalScores?.core !== undefined && (
+                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {regionalScores.core.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {regionalFeedbacks?.core && (
+                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
+                      {regionalFeedbacks.core}
+                    </p>
+                  )}
+                </div>
+
+                {/* Head */}
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  borderRadius: '8px',
+                  borderLeft: '3px solid #22c55e'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                    <strong style={{ color: '#22c55e', fontSize: '0.9rem' }}>👤 Kafa</strong>
+                    {regionalScores?.head !== undefined && (
+                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        {regionalScores.head.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {regionalFeedbacks?.head && (
+                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
+                      {regionalFeedbacks.head}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {trainingStatus === 'idle' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>

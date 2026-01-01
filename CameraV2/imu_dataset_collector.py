@@ -49,18 +49,26 @@ class IMUDatasetCollector:
         self.current_samples.append(sample)
     
     def add_rep_sequence(self, rep_number: int, imu_sequence: List[Dict], rep_start_time: float):
-        """Add a complete rep's IMU sequence."""
+        """
+        Add a complete rep's IMU sequence.
+        
+        Args:
+            rep_number: Rep number (0 for session-level continuous data, >0 for counted reps)
+            imu_sequence: List of IMU samples for this rep
+            rep_start_time: Camera rep completion timestamp (from camera collector)
+        """
         if not self.is_collecting:
             raise ValueError("No active collection session. Call start_session() first.")
         
         rep_data = {
             'rep_number': rep_number,
-            'rep_start_time': rep_start_time,
+            'rep_start_time': rep_start_time,  # Camera rep completion timestamp (synchronized with camera data)
+            'camera_rep_timestamp': rep_start_time,  # Alias for clarity (same value as rep_start_time)
             'samples': imu_sequence
         }
         
         self.current_samples.append(rep_data)
-        print(f"✅ Added IMU rep #{rep_number} to session (total: {len(self.current_samples)} reps) [Samples: {len(imu_sequence)}]")
+        print(f"✅ Added IMU rep #{rep_number} to session (total: {len(self.current_samples)} reps) [Samples: {len(imu_sequence)}, Camera timestamp: {rep_start_time}]")
     
     def save_session(self) -> Optional[str]:
         """Save current session to disk."""

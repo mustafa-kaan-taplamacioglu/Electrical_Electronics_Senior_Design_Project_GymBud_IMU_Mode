@@ -236,12 +236,12 @@ class DatasetCollector:
         with open(session_dir / "samples.json", "w") as f:
             json.dump(samples_data, f, indent=2, default=str)
         
-        # Save summary CSV
+        # Save summary CSV (include timestamp from camera rep)
         summary_path = session_dir / "summary.csv"
         with open(summary_path, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([
-                "rep_number", "expert_score", "is_perfect", "user_feedback",
+                "rep_number", "timestamp", "expert_score", "is_perfect", "user_feedback",
                 "arms_score", "legs_score", "core_score", "head_score",
                 "min_angle", "max_angle", "range_of_motion"
             ])
@@ -249,6 +249,7 @@ class DatasetCollector:
             for sample in self.current_samples:
                 writer.writerow([
                     sample.rep_number,
+                    sample.timestamp,  # Camera rep completion timestamp
                     sample.expert_score or "",
                     sample.is_perfect_form or "",
                     sample.user_feedback or "",
