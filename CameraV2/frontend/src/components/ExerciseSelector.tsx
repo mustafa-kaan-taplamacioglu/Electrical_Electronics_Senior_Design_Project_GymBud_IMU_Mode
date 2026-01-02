@@ -9,10 +9,8 @@ interface Props {
 const exerciseIcons: Record<ExerciseType, string> = {
   bicep_curls: '💪',
   squats: '🦵',
-  lunges: '🏃',
-  pushups: '🤸',
   lateral_shoulder_raises: '🙆',
-  tricep_extensions: '💪',
+  triceps_pushdown: '💪',
   dumbbell_rows: '🏋️',
   dumbbell_shoulder_press: '🏋️‍♂️',
 };

@@ -41,8 +41,12 @@ class ModelInference:
     
     def _find_models(self):
         """Find available camera and IMU models for the exercise."""
-        # Look for camera model
+        # Look for camera model (new structure: {exercise}/form_score_camera_{model_type})
         camera_patterns = [
+            self.models_dir / self.exercise / "form_score_camera_random_forest",
+            self.models_dir / self.exercise / "form_score_camera_gradient_boosting",
+            self.models_dir / self.exercise / "form_score_camera_ridge",
+            # Legacy patterns (old structure)
             self.models_dir / f"form_score_{self.exercise}_camera_random_forest",
             self.models_dir / f"form_score_{self.exercise}_camera_gradient_boosting",
             self.models_dir / f"form_score_{self.exercise}_camera_ridge",
@@ -53,8 +57,12 @@ class ModelInference:
                 self.camera_model_path = pattern
                 break
         
-        # Look for IMU model
+        # Look for IMU model (new structure: {exercise}/form_score_imu_{model_type})
         imu_patterns = [
+            self.models_dir / self.exercise / "form_score_imu_random_forest",
+            self.models_dir / self.exercise / "form_score_imu_gradient_boosting",
+            self.models_dir / self.exercise / "form_score_imu_ridge",
+            # Legacy patterns (old structure)
             self.models_dir / f"form_score_{self.exercise}_imu_random_forest",
             self.models_dir / f"form_score_{self.exercise}_imu_gradient_boosting",
             self.models_dir / f"form_score_{self.exercise}_imu_ridge",
@@ -89,15 +97,17 @@ class ModelInference:
                 return False
         return self.imu_model is not None
     
-    def predict_camera(self, landmarks_sequence: list) -> Optional[float]:
+    def predict_camera(self, landmarks_sequence: list) -> Optional[Dict[str, float]]:
         """
-        Predict form score using camera model.
+        Predict form scores using camera model.
         
         Args:
             landmarks_sequence: List of landmark frames (List[List[Dict]])
             
         Returns:
-            Predicted form score (0-100) or None if model not available
+            If multi-output: Dict with regional scores {"arms": float, "legs": float, "core": float, "head": float}
+            If single-output: Dict with overall score {"score": float}
+            Or None if model not available
         """
         if not self.load_camera_model():
             return None
@@ -120,10 +130,12 @@ class ModelInference:
         
         # Predict
         try:
-            score = self.camera_model.predict(features)
-            return float(score)
+            scores = self.camera_model.predict(features)
+            return scores  # Returns Dict[str, float] (either {"score": float} or {"arms": float, ...})
         except Exception as e:
             print(f"⚠️  Camera model prediction error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def predict_imu(self, imu_sequence: list) -> Optional[float]:

@@ -1,0 +1,48 @@
+{
+  "regional_score_arms": {
+    "mean": 51.0,
+    "std": 1.208304597359459,
+    "min": 50.03,
+    "max": 52.46,
+    "median": 50.3
+  },
+  "regional_score_legs": {
+    "mean": 100.0,
+    "std": 0.0,
+    "min": 100.0,
+    "max": 100.0,
+    "median": 100.0
+  },
+  "regional_score_core": {
+    "mean": 61.73333333333333,
+    "std": 1.114550233153365,
+    "min": 60.83,
+    "max": 63.08,
+    "median": 61.1
+  },
+  "regional_score_head": {
+    "mean": 100.0,
+    "std": 0.0,
+    "min": 100.0,
+    "max": 100.0,
+    "median": 100.0
+  },
+  "min_angle": {
+    "mean": 0.13333333333333333,
+    "std": 0.047140452079103175,
+    "min": 0.1,
+    "max": 0.19
+  },
+  "max_angle": {
+    "mean": 180.0,
+    "std": 0.0,
+    "min": 180.0,
+    "max": 180.0
+  },
+  "range_of_motion": {
+    "mean": 179.86666666666667,
+    "std": 0.04714045207910049,
+    "min": 179.81,
+    "max": 179.9
+  }
+}

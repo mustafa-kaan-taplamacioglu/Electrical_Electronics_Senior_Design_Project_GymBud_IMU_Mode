@@ -1,10 +1,8 @@
 export type ExerciseType = 
   | 'bicep_curls'
   | 'squats'
-  | 'lunges'
-  | 'pushups'
   | 'lateral_shoulder_raises'
-  | 'tricep_extensions'
+  | 'triceps_pushdown'
   | 'dumbbell_rows'
   | 'dumbbell_shoulder_press';
 

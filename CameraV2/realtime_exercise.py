@@ -71,29 +71,7 @@ EXERCISE_CONFIG = {
             "Kalça geriye"
         ]
     },
-    "lunges": {
-        "joints": {
-            "left": (23, 25, 27),
-            "right": (24, 26, 28)
-        },
-        "required_landmarks": {23, 24, 25, 26, 27, 28},
-        "rep_threshold": {
-            "contracted": 90,
-            "extended": 160
-        },
-        "rep_logic": {
-            "start_phase": "extended",
-            "count_on": "return_extended",
-            "direction": "contract_first"
-        },
-        "primary_angle": "knee",
-        "form_tips": [
-            "Ön diz 90 derece",
-            "Arka diz yere yakın",
-            "Gövde dik"
-        ]
-    },
-    "pushups": {
+    "triceps_pushdown": {
         "joints": {
             "left": (11, 13, 15),
             "right": (12, 14, 16)
@@ -137,7 +115,7 @@ EXERCISE_CONFIG = {
             "Omuzları silkme"
         ]
     },
-    "tricep_extensions": {
+    "triceps_pushdown": {
         "joints": {
             "left": (11, 13, 15),
             "right": (12, 14, 16)
@@ -282,10 +260,8 @@ class FormAnalyzer:
         self.exercise_landmarks = {
             "bicep_curls": {11, 12, 13, 14, 15, 16},  # shoulders, elbows, wrists
             "squats": {23, 24, 25, 26, 27, 28},        # hips, knees, ankles
-            "lunges": {23, 24, 25, 26, 27, 28},        # hips, knees, ankles
-            "pushups": {11, 12, 13, 14, 23, 24},       # shoulders, elbows, hips
             "lateral_shoulder_raises": {11, 12, 13, 14, 15, 16},  # shoulders, elbows, wrists
-            "tricep_extensions": {11, 12, 13, 14, 15, 16},        # shoulders, elbows, wrists
+            "triceps_pushdown": {11, 12, 13, 14, 15, 16},        # shoulders, elbows, wrists
             "dumbbell_rows": {11, 12, 13, 14, 23, 24},            # shoulders, elbows, hips
             "dumbbell_shoulder_press": {11, 12, 13, 14, 15, 16, 23, 24},  # upper body
         }
@@ -666,65 +642,6 @@ class FormAnalyzer:
         overall_score = np.mean(scores) if scores else 100
         return overall_score, issues
     
-    def check_pushups_form(self, landmarks, w, h):
-        """
-        Check pushups form quality.
-        Key checks: body alignment, depth, elbow position
-        """
-        issues = []
-        scores = []
-        
-        if not self.calibrated or self.shoulder_width is None:
-            return 100, []
-        
-        # Get landmarks
-        nose = landmarks.landmark[0]
-        left_shoulder = landmarks.landmark[11]
-        right_shoulder = landmarks.landmark[12]
-        left_elbow = landmarks.landmark[13]
-        right_elbow = landmarks.landmark[14]
-        left_hip = landmarks.landmark[23]
-        right_hip = landmarks.landmark[24]
-        left_ankle = landmarks.landmark[27]
-        right_ankle = landmarks.landmark[28]
-        
-        # Convert to pixels
-        l_shoulder = (left_shoulder.x * w, left_shoulder.y * h)
-        r_shoulder = (right_shoulder.x * w, right_shoulder.y * h)
-        l_hip = (left_hip.x * w, left_hip.y * h)
-        r_hip = (right_hip.x * w, right_hip.y * h)
-        l_ankle = (left_ankle.x * w, left_ankle.y * h)
-        r_ankle = (right_ankle.x * w, right_ankle.y * h)
-        
-        # CHECK 1: Body should be in a straight line (shoulder-hip-ankle alignment)
-        shoulder_center = ((l_shoulder[0] + r_shoulder[0]) / 2, (l_shoulder[1] + r_shoulder[1]) / 2)
-        hip_center = ((l_hip[0] + r_hip[0]) / 2, (l_hip[1] + r_hip[1]) / 2)
-        ankle_center = ((l_ankle[0] + r_ankle[0]) / 2, (l_ankle[1] + r_ankle[1]) / 2)
-        
-        # Check if hip sags or pikes (compare hip Y to line between shoulder and ankle)
-        if abs(shoulder_center[0] - ankle_center[0]) > 10:
-            expected_hip_y = shoulder_center[1] + (hip_center[0] - shoulder_center[0]) / (ankle_center[0] - shoulder_center[0]) * (ankle_center[1] - shoulder_center[1])
-            hip_deviation = hip_center[1] - expected_hip_y
-            
-            deviation_tolerance = self.torso_height * 0.15
-            if abs(hip_deviation) > deviation_tolerance:
-                if hip_deviation > 0:
-                    issues.append("Kalca dusuk (core sikistir)")
-                else:
-                    issues.append("Kalca yukarda")
-                scores.append(max(60, 100 - abs(hip_deviation) / deviation_tolerance * 30))
-            else:
-                scores.append(100)
-        else:
-            scores.append(100)
-        
-        # CHECK 2: Elbows shouldn't flare out too much (check elbow-shoulder angle)
-        # This is approximate since we can't see depth well
-        scores.append(100)  # Placeholder
-        
-        overall_score = np.mean(scores) if scores else 100
-        return overall_score, issues
-    
     def check_lateral_raises_form(self, landmarks, w, h):
         """
         Check lateral shoulder raises form quality.
@@ -940,18 +857,14 @@ class FormAnalyzer:
             return self.check_bicep_curl_form(landmarks, w, h)
         elif exercise == "squats":
             return self.check_squats_form(landmarks, w, h)
-        elif exercise == "pushups":
-            return self.check_pushups_form(landmarks, w, h)
         elif exercise == "lateral_shoulder_raises":
             return self.check_lateral_raises_form(landmarks, w, h)
-        elif exercise == "tricep_extensions":
-            return self.check_tricep_extensions_form(landmarks, w, h)
+        elif exercise == "triceps_pushdown":
+            return self.check_tricep_extensions_form(landmarks, w, h)  # Same form checks
         elif exercise == "dumbbell_rows":
             return self.check_dumbbell_rows_form(landmarks, w, h)
         elif exercise == "dumbbell_shoulder_press":
             return self.check_shoulder_press_form(landmarks, w, h)
-        elif exercise == "lunges":
-            return self.check_squats_form(landmarks, w, h)  # Similar to squats
         else:
             return 100, []  # No specific checks
 

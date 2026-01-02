@@ -12,30 +12,36 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.multioutput import MultiOutputRegressor
 from scipy.stats import randint, uniform
 import pickle
 import json
 
 
 class FormScorePredictor:
-    """ML model for predicting exercise form scores."""
+    """ML model for predicting exercise form scores (supports single-output and multi-output)."""
     
-    def __init__(self, model_type: str = "random_forest"):
+    # Regional output order (consistent across all models)
+    REGIONAL_OUTPUTS = ['arms', 'legs', 'core', 'head']
+    
+    def __init__(self, model_type: str = "random_forest", multi_output: bool = True):
         """
         Initialize predictor.
         
         Args:
             model_type: "random_forest", "gradient_boosting", or "ridge"
+            multi_output: If True, predict 4 regional scores (arms, legs, core, head). If False, predict single overall score.
         """
         self.model_type = model_type
+        self.multi_output = multi_output
         self.model = None
         self.scaler = StandardScaler()
         self.feature_names = None
         self.is_trained = False
         
-        # Model selection
+        # Base model selection
         if model_type == "random_forest":
-            self.model = RandomForestRegressor(
+            base_model = RandomForestRegressor(
                 n_estimators=100,
                 max_depth=10,
                 min_samples_split=5,
@@ -43,16 +49,22 @@ class FormScorePredictor:
                 n_jobs=-1
             )
         elif model_type == "gradient_boosting":
-            self.model = GradientBoostingRegressor(
+            base_model = GradientBoostingRegressor(
                 n_estimators=100,
                 max_depth=5,
                 learning_rate=0.1,
                 random_state=42
             )
         elif model_type == "ridge":
-            self.model = Ridge(alpha=1.0)
+            base_model = Ridge(alpha=1.0)
         else:
             raise ValueError(f"Unknown model_type: {model_type}")
+        
+        # Wrap in MultiOutputRegressor if multi_output is True
+        if multi_output:
+            self.model = MultiOutputRegressor(base_model, n_jobs=-1)
+        else:
+            self.model = base_model
     
     def prepare_features(self, samples: List, use_imu_features: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -64,7 +76,7 @@ class FormScorePredictor:
             
         Returns:
             X: Feature matrix (n_samples, n_features)
-            y: Labels (n_samples,)
+            y: Labels (n_samples,) for single-output or (n_samples, 4) for multi-output
         """
         # Extract features
         feature_vectors = []
@@ -89,16 +101,35 @@ class FormScorePredictor:
             feature_vec = [features_dict.get(name, 0.0) for name in self.feature_names]
             feature_vectors.append(feature_vec)
             
-            # Use expert_score as label, or regional score average
-            if sample.expert_score is not None:
-                labels.append(sample.expert_score)
-            elif sample.regional_scores:
-                avg_score = sum(sample.regional_scores.values()) / len(sample.regional_scores)
-                labels.append(avg_score)
-            elif sample.is_perfect_form is not None:
-                labels.append(100.0 if sample.is_perfect_form else 50.0)
+            # Prepare labels based on multi_output mode
+            if self.multi_output:
+                # Multi-output: Use regional scores (4 outputs: arms, legs, core, head)
+                if sample.regional_scores:
+                    # Extract regional scores in consistent order
+                    label_vec = [
+                        sample.regional_scores.get(region, 0.0)
+                        for region in self.REGIONAL_OUTPUTS
+                    ]
+                    labels.append(label_vec)
+                elif sample.expert_score is not None:
+                    # Fallback: Use expert_score for all regions (if no regional scores)
+                    labels.append([sample.expert_score] * 4)
+                elif sample.is_perfect_form is not None:
+                    score = 100.0 if sample.is_perfect_form else 50.0
+                    labels.append([score] * 4)
+                else:
+                    continue  # Skip samples without labels
             else:
-                continue  # Skip samples without labels
+                # Single-output: Use expert_score or regional score average
+                if sample.expert_score is not None:
+                    labels.append(sample.expert_score)
+                elif sample.regional_scores:
+                    avg_score = sum(sample.regional_scores.values()) / len(sample.regional_scores)
+                    labels.append(avg_score)
+                elif sample.is_perfect_form is not None:
+                    labels.append(100.0 if sample.is_perfect_form else 50.0)
+                else:
+                    continue  # Skip samples without labels
         
         X = np.array(feature_vectors)
         y = np.array(labels)
@@ -130,7 +161,12 @@ class FormScorePredictor:
             print(f"\n📊 Dataset:")
             print(f"   Total samples: {len(X)}")
             print(f"   Features: {len(self.feature_names)}")
-            print(f"   Label range: {y.min():.1f} - {y.max():.1f}")
+            if self.multi_output:
+                print(f"   Outputs: {len(self.REGIONAL_OUTPUTS)} regional scores ({', '.join(self.REGIONAL_OUTPUTS)})")
+                print(f"   Label range: {y.min():.1f} - {y.max():.1f} (per region)")
+            else:
+                print(f"   Output: Single overall score")
+                print(f"   Label range: {y.min():.1f} - {y.max():.1f}")
         
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(
@@ -156,21 +192,47 @@ class FormScorePredictor:
         y_train_pred = self.model.predict(X_train_scaled)
         y_test_pred = self.model.predict(X_test_scaled)
         
-        train_mse = mean_squared_error(y_train, y_train_pred)
-        test_mse = mean_squared_error(y_test, y_test_pred)
-        train_mae = mean_absolute_error(y_train, y_train_pred)
-        test_mae = mean_absolute_error(y_test, y_test_pred)
-        train_r2 = r2_score(y_train, y_train_pred)
-        test_r2 = r2_score(y_test, y_test_pred)
-        
-        if verbose:
-            print(f"\n📈 Results:")
-            print(f"   Train MSE: {train_mse:.2f}")
-            print(f"   Test MSE:  {test_mse:.2f}")
-            print(f"   Train MAE: {train_mae:.2f}")
-            print(f"   Test MAE:  {test_mae:.2f}")
-            print(f"   Train R²:  {train_r2:.3f}")
-            print(f"   Test R²:   {test_r2:.3f}")
+        if self.multi_output:
+            # Multi-output evaluation: Calculate metrics per region and average
+            train_mse = mean_squared_error(y_train, y_train_pred, multioutput='uniform_average')
+            test_mse = mean_squared_error(y_test, y_test_pred, multioutput='uniform_average')
+            train_mae = mean_absolute_error(y_train, y_train_pred, multioutput='uniform_average')
+            test_mae = mean_absolute_error(y_test, y_test_pred, multioutput='uniform_average')
+            train_r2 = r2_score(y_train, y_train_pred, multioutput='uniform_average')
+            test_r2 = r2_score(y_test, y_test_pred, multioutput='uniform_average')
+            
+            if verbose:
+                print(f"\n📈 Results (Average across regions):")
+                print(f"   Train MSE: {train_mse:.2f}")
+                print(f"   Test MSE:  {test_mse:.2f}")
+                print(f"   Train MAE: {train_mae:.2f}")
+                print(f"   Test MAE:  {test_mae:.2f}")
+                print(f"   Train R²:  {train_r2:.3f}")
+                print(f"   Test R²:   {test_r2:.3f}")
+                
+                # Per-region breakdown
+                print(f"\n📊 Per-Region Test MAE:")
+                for i, region in enumerate(self.REGIONAL_OUTPUTS):
+                    region_mae = mean_absolute_error(y_test[:, i], y_test_pred[:, i])
+                    region_r2 = r2_score(y_test[:, i], y_test_pred[:, i])
+                    print(f"   {region:8s}: MAE={region_mae:.2f}, R²={region_r2:.3f}")
+        else:
+            # Single-output evaluation
+            train_mse = mean_squared_error(y_train, y_train_pred)
+            test_mse = mean_squared_error(y_test, y_test_pred)
+            train_mae = mean_absolute_error(y_train, y_train_pred)
+            test_mae = mean_absolute_error(y_test, y_test_pred)
+            train_r2 = r2_score(y_train, y_train_pred)
+            test_r2 = r2_score(y_test, y_test_pred)
+            
+            if verbose:
+                print(f"\n📈 Results:")
+                print(f"   Train MSE: {train_mse:.2f}")
+                print(f"   Test MSE:  {test_mse:.2f}")
+                print(f"   Train MAE: {train_mae:.2f}")
+                print(f"   Test MAE:  {test_mae:.2f}")
+                print(f"   Train R²:  {train_r2:.3f}")
+                print(f"   Test R²:   {test_r2:.3f}")
         
         self.is_trained = True
         
@@ -301,7 +363,9 @@ class FormScorePredictor:
         search.fit(X_scaled, y)
         
         # Update model with best parameters
+        # search.best_estimator_ is already wrapped in MultiOutputRegressor if multi_output=True
         self.model = search.best_estimator_
+        
         best_params = search.best_params_
         
         if verbose:
@@ -393,8 +457,17 @@ class FormScorePredictor:
             'test_r2': float(test_r2)
         }
     
-    def predict(self, features: Dict[str, float]) -> float:
-        """Predict form score from features."""
+    def predict(self, features: Dict[str, float]) -> Dict[str, float]:
+        """
+        Predict form scores from features.
+        
+        Args:
+            features: Dictionary of feature_name -> value
+            
+        Returns:
+            If multi_output: Dict with regional scores {"arms": float, "legs": float, "core": float, "head": float}
+            If single_output: Dict with overall score {"score": float}
+        """
         if not self.is_trained:
             raise ValueError("Model not trained. Call train() first.")
         
@@ -407,9 +480,18 @@ class FormScorePredictor:
         feature_vec_scaled = self.scaler.transform(feature_vec)
         
         # Predict
-        score = self.model.predict(feature_vec_scaled)[0]
+        prediction = self.model.predict(feature_vec_scaled)[0]
         
-        return float(np.clip(score, 0, 100))
+        if self.multi_output:
+            # Return regional scores as dictionary
+            result = {
+                region: float(np.clip(prediction[i], 0, 100))
+                for i, region in enumerate(self.REGIONAL_OUTPUTS)
+            }
+            return result
+        else:
+            # Return overall score
+            return {"score": float(np.clip(prediction, 0, 100))}
     
     def get_feature_importance(self, top_n: int = 20) -> Dict[str, float]:
         """Get feature importance scores."""
@@ -454,6 +536,7 @@ class FormScorePredictor:
         from datetime import datetime
         metadata = {
             'model_type': self.model_type,
+            'multi_output': self.multi_output,
             'feature_names': self.feature_names,
             'feature_count': len(self.feature_names) if self.feature_names else 0,
             'is_trained': self.is_trained,
@@ -462,6 +545,8 @@ class FormScorePredictor:
             'training_samples': training_samples,
             'performance': performance_metrics or {}
         }
+        if self.multi_output:
+            metadata['regional_outputs'] = self.REGIONAL_OUTPUTS
         
         with open(path / "metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
@@ -477,8 +562,9 @@ class FormScorePredictor:
         with open(path / "metadata.json", "r") as f:
             metadata = json.load(f)
         
-        # Create instance
-        predictor = cls(model_type=metadata['model_type'])
+        # Create instance (multi_output defaults to True if not in metadata for backward compatibility)
+        multi_output = metadata.get('multi_output', True)
+        predictor = cls(model_type=metadata['model_type'], multi_output=multi_output)
         predictor.feature_names = metadata['feature_names']
         predictor.is_trained = metadata['is_trained']
         
@@ -497,10 +583,14 @@ class FormScorePredictor:
 class BaselineCalculator:
     """Calculate baseline values from perfect form samples."""
     
+    # Regional output order (must match FormScorePredictor.REGIONAL_OUTPUTS)
+    REGIONAL_OUTPUTS = ['arms', 'legs', 'core', 'head']
+    
     @staticmethod
     def calculate_baselines(
         perfect_samples: List,
-        tolerance_percentile: float = 95.0
+        tolerance_percentile: float = 95.0,
+        regional: bool = True
     ) -> Dict[str, Dict[str, float]]:
         """
         Calculate baseline thresholds from perfect form samples.
@@ -508,14 +598,36 @@ class BaselineCalculator:
         Args:
             perfect_samples: List of RepSample objects marked as perfect
             tolerance_percentile: Percentile to use for tolerance (e.g., 95 = use 95th percentile as max)
+            regional: If True, also calculate regional baselines (separate for each region)
         
         Returns:
-            Dict with baseline values for each feature/angle
+            Dict with baseline values for each feature/angle (and regional scores if regional=True)
         """
         if len(perfect_samples) == 0:
             return {}
         
         baselines = {}
+        
+        # Calculate regional score baselines if requested
+        if regional:
+            regional_scores = {region: [] for region in BaselineCalculator.REGIONAL_OUTPUTS}
+            for sample in perfect_samples:
+                if sample.regional_scores:
+                    for region in BaselineCalculator.REGIONAL_OUTPUTS:
+                        if region in sample.regional_scores:
+                            regional_scores[region].append(sample.regional_scores[region])
+            
+            # Add regional score baselines
+            for region, scores in regional_scores.items():
+                if len(scores) > 0:
+                    scores_array = np.array(scores)
+                    baselines[f'regional_score_{region}'] = {
+                        'mean': float(np.mean(scores_array)),
+                        'std': float(np.std(scores_array)),
+                        'min': float(np.percentile(scores_array, 100 - tolerance_percentile)),
+                        'max': float(np.percentile(scores_array, tolerance_percentile)),
+                        'median': float(np.median(scores_array))
+                    }
         
         # Extract all features
         all_features = {}

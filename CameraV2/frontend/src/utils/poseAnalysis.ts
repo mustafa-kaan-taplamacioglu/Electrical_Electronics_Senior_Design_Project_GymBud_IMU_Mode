@@ -33,11 +33,6 @@ const ULTRA_STRICT_CONFIG = {
     hip_depth_threshold: 95,  // Kalça diz hizasının altına inmeli
     knee_cave_limit: 0.85     // Dizler ayak bileği genişliğinin %85'inin altına inmemeli
   },
-  pushups: {
-    max_hip_deviation: 0.06,  // Kalça-omuz-ayak çizgisi sapması
-    max_elbow_flare: 1.4,     // Dirseklerin omuz genişliğine oranı (45-60 derece ideal)
-    min_chest_depth: 100      // Göğüs yere yaklaşma (dirsek açısı)
-  }
 };
 
 // Calculate angle between three points
@@ -73,7 +68,6 @@ export const getPrimaryAngle = (
       return (leftElbow + rightElbow) / 2;
 
     case 'squats':
-    case 'lunges':
       // Average of both knee angles
       const leftKnee = calculateAngle(
         landmarks[LANDMARKS.LEFT_HIP],
@@ -86,14 +80,6 @@ export const getPrimaryAngle = (
         landmarks[LANDMARKS.RIGHT_ANKLE]
       );
       return (leftKnee + rightKnee) / 2;
-
-    case 'pushups':
-      // Elbow angle
-      return calculateAngle(
-        landmarks[LANDMARKS.LEFT_SHOULDER],
-        landmarks[LANDMARKS.LEFT_ELBOW],
-        landmarks[LANDMARKS.LEFT_WRIST]
-      );
 
     case 'lateral_shoulder_raises':
       // Shoulder angle (arm-torso)
@@ -109,7 +95,7 @@ export const getPrimaryAngle = (
       );
       return (leftShoulder + rightShoulder) / 2;
 
-    case 'tricep_extensions':
+    case 'triceps_pushdown':
       return calculateAngle(
         landmarks[LANDMARKS.LEFT_SHOULDER],
         landmarks[LANDMARKS.LEFT_ELBOW],
@@ -333,105 +319,6 @@ export const checkForm = (
       break;
     }
     
-    // ==================== LUNGE ====================
-    case 'lunges': {
-      // 1. Ön diz açısı (90 derece olmalı)
-      const frontKneeAngle = calculateAngle(
-        landmarks[LANDMARKS.LEFT_HIP],
-        landmarks[LANDMARKS.LEFT_KNEE],
-        landmarks[LANDMARKS.LEFT_ANKLE]
-      );
-      
-      if (frontKneeAngle < 75) {
-        issues.push('Ön diz çok bükük');
-        scores.push(70);
-      } else if (frontKneeAngle > 110) {
-        issues.push('Ön dizde 90 derece yap');
-        scores.push(75);
-      } else {
-        scores.push(100);
-      }
-
-      // 2. Gövde dikliği
-      const torsoUpright = Math.abs(
-        (landmarks[LANDMARKS.LEFT_SHOULDER].x + landmarks[LANDMARKS.RIGHT_SHOULDER].x) / 2 -
-        (landmarks[LANDMARKS.LEFT_HIP].x + landmarks[LANDMARKS.RIGHT_HIP].x) / 2
-      );
-      
-      if (torsoUpright > 0.1) {
-        issues.push('Gövde dik olmalı - öne eğilme');
-        scores.push(70);
-      }
-      
-      // 3. Arka diz yere yakın olmalı
-      const backKneeY = landmarks[LANDMARKS.RIGHT_KNEE].y;
-      const ankleY = landmarks[LANDMARKS.RIGHT_ANKLE].y;
-      
-      if (backKneeY < ankleY - 0.15) {
-        issues.push('Arka dizi yere yaklaştır');
-        scores.push(75);
-      }
-      
-      // 4. Denge kontrolü
-      const hipTilt = Math.abs(landmarks[LANDMARKS.LEFT_HIP].y - landmarks[LANDMARKS.RIGHT_HIP].y);
-      if (hipTilt > 0.08) {
-        issues.push('Kalçalar düz olmalı');
-        scores.push(70);
-      }
-      break;
-    }
-
-    // ==================== PUSH-UP ====================
-    case 'pushups': {
-      // 1. Vücut düzlüğü (tahta pozisyonu)
-      const hipY = (landmarks[LANDMARKS.LEFT_HIP].y + landmarks[LANDMARKS.RIGHT_HIP].y) / 2;
-      const shoulderY = (landmarks[LANDMARKS.LEFT_SHOULDER].y + landmarks[LANDMARKS.RIGHT_SHOULDER].y) / 2;
-      const ankleY = (landmarks[LANDMARKS.LEFT_ANKLE].y + landmarks[LANDMARKS.RIGHT_ANKLE].y) / 2;
-      
-      // Kalça omuz-ayak çizgisinde olmalı
-      const expectedHipY = (shoulderY + ankleY) / 2;
-      const hipSag = hipY - expectedHipY;
-      
-      if (hipSag > 0.08) {
-        issues.push('Kalça çok düşük - core sık');
-        scores.push(60);
-      } else if (hipSag < -0.08) {
-        issues.push('Kalça çok yüksek - düz ol');
-        scores.push(65);
-      } else {
-        scores.push(100);
-      }
-      
-      // 2. Dirsek açısı (45 derece dışa)
-      const elbowWidth = Math.abs(landmarks[LANDMARKS.LEFT_ELBOW].x - landmarks[LANDMARKS.RIGHT_ELBOW].x);
-      const shoulderWidth = Math.abs(landmarks[LANDMARKS.LEFT_SHOULDER].x - landmarks[LANDMARKS.RIGHT_SHOULDER].x);
-      
-      if (elbowWidth > shoulderWidth * 1.5) {
-        issues.push('Dirsekler çok açık - 45° tut');
-        scores.push(70);
-      }
-      
-      // 3. Göğüs yere yakın mı (alt pozisyon)
-      const elbowAngle = calculateAngle(
-        landmarks[LANDMARKS.LEFT_SHOULDER],
-        landmarks[LANDMARKS.LEFT_ELBOW],
-        landmarks[LANDMARKS.LEFT_WRIST]
-      );
-      
-      if (elbowAngle > 100 && elbowAngle < 150) {
-        issues.push('Göğsü yere daha yaklaştır');
-        scores.push(75);
-      }
-      
-      // 4. Baş pozisyonu (nötr olmalı)
-      const noseY = landmarks[LANDMARKS.NOSE].y;
-      if (noseY < shoulderY - 0.15) {
-        issues.push('Başı yukarı kaldırma - nötr tut');
-        scores.push(80);
-      }
-      break;
-    }
-    
     // ==================== LATERAL RAISE ====================
     case 'lateral_shoulder_raises': {
       checkUpperBodyStability();
@@ -490,8 +377,8 @@ export const checkForm = (
       break;
     }
     
-    // ==================== TRICEP EXTENSION ====================
-    case 'tricep_extensions': {
+    // ==================== TRICEPS PUSHDOWN ====================
+    case 'triceps_pushdown': {
       checkUpperBodyStability();
       
       // 1. Üst kol sabit olmalı
@@ -673,32 +560,16 @@ export const checkForm = (
 const getRequiredLandmarks = (exercise: ExerciseType): number[] => {
   switch (exercise) {
     case 'bicep_curls':
-    case 'tricep_extensions':
+    case 'triceps_pushdown':
     case 'lateral_shoulder_raises':
     case 'dumbbell_shoulder_press':
-      return [
-        LANDMARKS.LEFT_SHOULDER, LANDMARKS.RIGHT_SHOULDER,
-        LANDMARKS.LEFT_ELBOW, LANDMARKS.RIGHT_ELBOW,
-        LANDMARKS.LEFT_WRIST, LANDMARKS.RIGHT_WRIST,
-        LANDMARKS.LEFT_HIP, LANDMARKS.RIGHT_HIP,
-      ];
+      // Upper body exercises: Face (0-10) + Upper Body (11-16) + Hands (17-22) = 23 landmarks
+      return Array.from({ length: 23 }, (_, i) => i);
 
     case 'squats':
-    case 'lunges':
-      return [
-        LANDMARKS.LEFT_HIP, LANDMARKS.RIGHT_HIP,
-        LANDMARKS.LEFT_KNEE, LANDMARKS.RIGHT_KNEE,
-        LANDMARKS.LEFT_ANKLE, LANDMARKS.RIGHT_ANKLE,
-      ];
-
-    case 'pushups':
     case 'dumbbell_rows':
-      return [
-        LANDMARKS.LEFT_SHOULDER, LANDMARKS.RIGHT_SHOULDER,
-        LANDMARKS.LEFT_ELBOW, LANDMARKS.RIGHT_ELBOW,
-        LANDMARKS.LEFT_WRIST, LANDMARKS.RIGHT_WRIST,
-        LANDMARKS.LEFT_HIP, LANDMARKS.RIGHT_HIP,
-      ];
+      // Full body: All 33 landmarks (0-32)
+      return Array.from({ length: 33 }, (_, i) => i);
 
     default:
       return [];
@@ -725,10 +596,8 @@ const MIN_FORM_SCORE_FOR_VALID_REP = 60;
 const ANGLE_REQUIREMENTS: Record<string, { minAngle: number; maxAngle: number; tolerance: number }> = {
   bicep_curls: { minAngle: 35, maxAngle: 150, tolerance: 15 },      // Dirsek: 35°-150° arası hareket
   squats: { minAngle: 70, maxAngle: 170, tolerance: 15 },           // Diz: 70°-170° arası
-  lunges: { minAngle: 75, maxAngle: 165, tolerance: 15 },           // Diz: 75°-165° arası
-  pushups: { minAngle: 70, maxAngle: 165, tolerance: 15 },          // Dirsek: 70°-165° arası
   lateral_shoulder_raises: { minAngle: 15, maxAngle: 85, tolerance: 10 }, // Omuz: 15°-85° arası
-  tricep_extensions: { minAngle: 45, maxAngle: 165, tolerance: 15 }, // Dirsek: 45°-165° arası
+  triceps_pushdown: { minAngle: 45, maxAngle: 165, tolerance: 15 }, // Dirsek: 45°-165° arası
   dumbbell_rows: { minAngle: 45, maxAngle: 160, tolerance: 15 },    // Dirsek: 45°-160° arası
   dumbbell_shoulder_press: { minAngle: 75, maxAngle: 170, tolerance: 15 }, // Dirsek: 75°-170° arası
 };
@@ -865,8 +734,8 @@ export const updateRepCounter = (
       }
       break;
     
-    // Tricep extension: Açı ARTAR yukarı iterken (160° üst, 60° alt)
-    case 'tricep_extensions':
+    // Triceps pushdown: Açı ARTAR yukarı iterken (160° üst, 60° alt)
+    case 'triceps_pushdown':
       if (state.phase === 'down' && angle > up) {
         newState.phase = 'up';
       } else if (state.phase === 'up' && angle < down) {
@@ -877,26 +746,6 @@ export const updateRepCounter = (
     
     // Squat: Diz açısı AZALIR aşağı inerken (160° üst, 90° alt)
     case 'squats':
-      if (state.phase === 'up' && angle < down) {
-        newState.phase = 'down';
-      } else if (state.phase === 'down' && angle > up) {
-        newState.phase = 'up';
-        completeRep();
-      }
-      break;
-    
-    // Lunge: Squat gibi diz açısı (160° üst, 90° alt)
-    case 'lunges':
-      if (state.phase === 'up' && angle < down) {
-        newState.phase = 'down';
-      } else if (state.phase === 'down' && angle > up) {
-        newState.phase = 'up';
-        completeRep();
-      }
-      break;
-    
-    // Push-up: Dirsek açısı AZALIR aşağı inerken (160° üst, 90° alt)
-    case 'pushups':
       if (state.phase === 'up' && angle < down) {
         newState.phase = 'down';
       } else if (state.phase === 'down' && angle > up) {

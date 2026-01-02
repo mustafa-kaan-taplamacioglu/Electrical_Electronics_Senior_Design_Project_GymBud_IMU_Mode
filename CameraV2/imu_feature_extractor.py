@@ -27,6 +27,7 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
     features = {}
     
     # Extract data arrays for each sensor
+    # Euler angles and quaternions
     left_wrist_roll = []
     left_wrist_pitch = []
     left_wrist_yaw = []
@@ -34,6 +35,14 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
     left_wrist_quat_x = []
     left_wrist_quat_y = []
     left_wrist_quat_z = []
+    
+    # Accelerometer and gyroscope (NEW - for new format)
+    left_wrist_ax = []
+    left_wrist_ay = []
+    left_wrist_az = []
+    left_wrist_gx = []
+    left_wrist_gy = []
+    left_wrist_gz = []
     
     right_wrist_roll = []
     right_wrist_pitch = []
@@ -43,6 +52,13 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
     right_wrist_quat_y = []
     right_wrist_quat_z = []
     
+    right_wrist_ax = []
+    right_wrist_ay = []
+    right_wrist_az = []
+    right_wrist_gx = []
+    right_wrist_gy = []
+    right_wrist_gz = []
+    
     chest_roll = []
     chest_pitch = []
     chest_yaw = []
@@ -51,46 +67,138 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
     chest_quat_y = []
     chest_quat_z = []
     
+    chest_ax = []
+    chest_ay = []
+    chest_az = []
+    chest_gx = []
+    chest_gy = []
+    chest_gz = []
+    
     # Extract IMU data from sequence
+    # Support both formats: new format (flat) and old format (nested)
     for sample in imu_sequence:
         if sample.get('left_wrist'):
             lw = sample['left_wrist']
-            if 'euler' in lw:
-                left_wrist_roll.append(lw['euler'].get('roll', 0))
-                left_wrist_pitch.append(lw['euler'].get('pitch', 0))
-                left_wrist_yaw.append(lw['euler'].get('yaw', 0))
-            if 'quaternion' in lw:
-                q = lw['quaternion']
-                left_wrist_quat_w.append(q.get('w', 1))
-                left_wrist_quat_x.append(q.get('x', 0))
-                left_wrist_quat_y.append(q.get('y', 0))
-                left_wrist_quat_z.append(q.get('z', 0))
+            # New format: direct keys (ax, ay, az, gx, gy, gz, qw, qx, qy, qz, roll, pitch, yaw)
+            if 'roll' in lw or 'ax' in lw:
+                left_wrist_roll.append(lw.get('roll', 0))
+                left_wrist_pitch.append(lw.get('pitch', 0))
+                left_wrist_yaw.append(lw.get('yaw', 0))
+                left_wrist_quat_w.append(lw.get('qw', 1))
+                left_wrist_quat_x.append(lw.get('qx', 0))
+                left_wrist_quat_y.append(lw.get('qy', 0))
+                left_wrist_quat_z.append(lw.get('qz', 0))
+                # Accelerometer and gyroscope
+                left_wrist_ax.append(lw.get('ax', 0))
+                left_wrist_ay.append(lw.get('ay', 0))
+                left_wrist_az.append(lw.get('az', 0))
+                left_wrist_gx.append(lw.get('gx', 0))
+                left_wrist_gy.append(lw.get('gy', 0))
+                left_wrist_gz.append(lw.get('gz', 0))
+            # Old format: nested (euler, quaternion, accel, gyro)
+            else:
+                if 'euler' in lw:
+                    left_wrist_roll.append(lw['euler'].get('roll', 0))
+                    left_wrist_pitch.append(lw['euler'].get('pitch', 0))
+                    left_wrist_yaw.append(lw['euler'].get('yaw', 0))
+                if 'quaternion' in lw:
+                    q = lw['quaternion']
+                    left_wrist_quat_w.append(q.get('w', q.get('qw', 1)))
+                    left_wrist_quat_x.append(q.get('x', q.get('qx', 0)))
+                    left_wrist_quat_y.append(q.get('y', q.get('qy', 0)))
+                    left_wrist_quat_z.append(q.get('z', q.get('qz', 0)))
+                if 'accel' in lw:
+                    a = lw['accel']
+                    left_wrist_ax.append(a.get('x', 0))
+                    left_wrist_ay.append(a.get('y', 0))
+                    left_wrist_az.append(a.get('z', 0))
+                if 'gyro' in lw:
+                    g = lw['gyro']
+                    left_wrist_gx.append(g.get('x', 0))
+                    left_wrist_gy.append(g.get('y', 0))
+                    left_wrist_gz.append(g.get('z', 0))
         
         if sample.get('right_wrist'):
             rw = sample['right_wrist']
-            if 'euler' in rw:
-                right_wrist_roll.append(rw['euler'].get('roll', 0))
-                right_wrist_pitch.append(rw['euler'].get('pitch', 0))
-                right_wrist_yaw.append(rw['euler'].get('yaw', 0))
-            if 'quaternion' in rw:
-                q = rw['quaternion']
-                right_wrist_quat_w.append(q.get('w', 1))
-                right_wrist_quat_x.append(q.get('x', 0))
-                right_wrist_quat_y.append(q.get('y', 0))
-                right_wrist_quat_z.append(q.get('z', 0))
+            # New format: direct keys
+            if 'roll' in rw or 'ax' in rw:
+                right_wrist_roll.append(rw.get('roll', 0))
+                right_wrist_pitch.append(rw.get('pitch', 0))
+                right_wrist_yaw.append(rw.get('yaw', 0))
+                right_wrist_quat_w.append(rw.get('qw', 1))
+                right_wrist_quat_x.append(rw.get('qx', 0))
+                right_wrist_quat_y.append(rw.get('qy', 0))
+                right_wrist_quat_z.append(rw.get('qz', 0))
+                # Accelerometer and gyroscope
+                right_wrist_ax.append(rw.get('ax', 0))
+                right_wrist_ay.append(rw.get('ay', 0))
+                right_wrist_az.append(rw.get('az', 0))
+                right_wrist_gx.append(rw.get('gx', 0))
+                right_wrist_gy.append(rw.get('gy', 0))
+                right_wrist_gz.append(rw.get('gz', 0))
+            # Old format: nested
+            else:
+                if 'euler' in rw:
+                    right_wrist_roll.append(rw['euler'].get('roll', 0))
+                    right_wrist_pitch.append(rw['euler'].get('pitch', 0))
+                    right_wrist_yaw.append(rw['euler'].get('yaw', 0))
+                if 'quaternion' in rw:
+                    q = rw['quaternion']
+                    right_wrist_quat_w.append(q.get('w', q.get('qw', 1)))
+                    right_wrist_quat_x.append(q.get('x', q.get('qx', 0)))
+                    right_wrist_quat_y.append(q.get('y', q.get('qy', 0)))
+                    right_wrist_quat_z.append(q.get('z', q.get('qz', 0)))
+                if 'accel' in rw:
+                    a = rw['accel']
+                    right_wrist_ax.append(a.get('x', 0))
+                    right_wrist_ay.append(a.get('y', 0))
+                    right_wrist_az.append(a.get('z', 0))
+                if 'gyro' in rw:
+                    g = rw['gyro']
+                    right_wrist_gx.append(g.get('x', 0))
+                    right_wrist_gy.append(g.get('y', 0))
+                    right_wrist_gz.append(g.get('z', 0))
         
         if sample.get('chest'):
             ch = sample['chest']
-            if 'euler' in ch:
-                chest_roll.append(ch['euler'].get('roll', 0))
-                chest_pitch.append(ch['euler'].get('pitch', 0))
-                chest_yaw.append(ch['euler'].get('yaw', 0))
-            if 'quaternion' in ch:
-                q = ch['quaternion']
-                chest_quat_w.append(q.get('w', 1))
-                chest_quat_x.append(q.get('x', 0))
-                chest_quat_y.append(q.get('y', 0))
-                chest_quat_z.append(q.get('z', 0))
+            # New format: direct keys
+            if 'roll' in ch or 'ax' in ch:
+                chest_roll.append(ch.get('roll', 0))
+                chest_pitch.append(ch.get('pitch', 0))
+                chest_yaw.append(ch.get('yaw', 0))
+                chest_quat_w.append(ch.get('qw', 1))
+                chest_quat_x.append(ch.get('qx', 0))
+                chest_quat_y.append(ch.get('qy', 0))
+                chest_quat_z.append(ch.get('qz', 0))
+                # Accelerometer and gyroscope
+                chest_ax.append(ch.get('ax', 0))
+                chest_ay.append(ch.get('ay', 0))
+                chest_az.append(ch.get('az', 0))
+                chest_gx.append(ch.get('gx', 0))
+                chest_gy.append(ch.get('gy', 0))
+                chest_gz.append(ch.get('gz', 0))
+            # Old format: nested
+            else:
+                if 'euler' in ch:
+                    chest_roll.append(ch['euler'].get('roll', 0))
+                    chest_pitch.append(ch['euler'].get('pitch', 0))
+                    chest_yaw.append(ch['euler'].get('yaw', 0))
+                if 'quaternion' in ch:
+                    q = ch['quaternion']
+                    chest_quat_w.append(q.get('w', q.get('qw', 1)))
+                    chest_quat_x.append(q.get('x', q.get('qx', 0)))
+                    chest_quat_y.append(q.get('y', q.get('qy', 0)))
+                    chest_quat_z.append(q.get('z', q.get('qz', 0)))
+                if 'accel' in ch:
+                    a = ch['accel']
+                    chest_ax.append(a.get('x', 0))
+                    chest_ay.append(a.get('y', 0))
+                    chest_az.append(a.get('z', 0))
+                if 'gyro' in ch:
+                    g = ch['gyro']
+                    chest_gx.append(g.get('x', 0))
+                    chest_gy.append(g.get('y', 0))
+                    chest_gz.append(g.get('z', 0))
     
     # Helper function to compute statistics
     def compute_stats(arr, prefix):
@@ -116,6 +224,13 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
         features.update(compute_stats(left_wrist_quat_x, 'lw_qx'))
         features.update(compute_stats(left_wrist_quat_y, 'lw_qy'))
         features.update(compute_stats(left_wrist_quat_z, 'lw_qz'))
+    if left_wrist_ax:
+        features.update(compute_stats(left_wrist_ax, 'lw_ax'))
+        features.update(compute_stats(left_wrist_ay, 'lw_ay'))
+        features.update(compute_stats(left_wrist_az, 'lw_az'))
+        features.update(compute_stats(left_wrist_gx, 'lw_gx'))
+        features.update(compute_stats(left_wrist_gy, 'lw_gy'))
+        features.update(compute_stats(left_wrist_gz, 'lw_gz'))
     
     # Right Wrist
     if right_wrist_roll:
@@ -126,6 +241,13 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
         features.update(compute_stats(right_wrist_quat_x, 'rw_qx'))
         features.update(compute_stats(right_wrist_quat_y, 'rw_qy'))
         features.update(compute_stats(right_wrist_quat_z, 'rw_qz'))
+    if right_wrist_ax:
+        features.update(compute_stats(right_wrist_ax, 'rw_ax'))
+        features.update(compute_stats(right_wrist_ay, 'rw_ay'))
+        features.update(compute_stats(right_wrist_az, 'rw_az'))
+        features.update(compute_stats(right_wrist_gx, 'rw_gx'))
+        features.update(compute_stats(right_wrist_gy, 'rw_gy'))
+        features.update(compute_stats(right_wrist_gz, 'rw_gz'))
     
     # Cross-sensor features (symmetry, coordination)
     if left_wrist_roll and right_wrist_roll:
@@ -149,6 +271,13 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
         features['has_chest'] = 1.0
     else:
         features['has_chest'] = 0.0
+    if chest_ax:
+        features.update(compute_stats(chest_ax, 'ch_ax'))
+        features.update(compute_stats(chest_ay, 'ch_ay'))
+        features.update(compute_stats(chest_az, 'ch_az'))
+        features.update(compute_stats(chest_gx, 'ch_gx'))
+        features.update(compute_stats(chest_gy, 'ch_gy'))
+        features.update(compute_stats(chest_gz, 'ch_gz'))
     
     # Sequence length
     features['sequence_length'] = float(len(imu_sequence))

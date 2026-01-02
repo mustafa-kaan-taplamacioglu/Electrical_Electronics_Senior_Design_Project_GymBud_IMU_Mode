@@ -290,6 +290,8 @@ class IMUDatasetCollector:
                         all_samples.append({
                             'rep_number': rep_sample['rep_number'],
                             'imu_sequence': rep_sample['samples'],
+                            'rep_start_time': rep_sample.get('rep_start_time', rep_sample.get('camera_rep_timestamp', 0)),
+                            'camera_rep_timestamp': rep_sample.get('camera_rep_timestamp', rep_sample.get('rep_start_time', 0)),
                             'session_id': session_data.get('session_id', 'unknown'),
                             'exercise': exercise or session_data.get('session_id', '').split('_')[0]
                         })

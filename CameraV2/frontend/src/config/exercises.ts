@@ -25,30 +25,6 @@ export const EXERCISES: Record<ExerciseType, ExerciseConfig> = {
       'Push through heels',
     ],
   },
-  lunges: {
-    name: 'lunges',
-    displayName: 'Lunge',
-    description: 'Single leg squat',
-    primaryJoints: ['hip', 'knee', 'ankle'],
-    repThreshold: { up: 160, down: 90 },
-    formTips: [
-      'Front knee at 90 degrees',
-      'Torso upright',
-      'Control your balance',
-    ],
-  },
-  pushups: {
-    name: 'pushups',
-    displayName: 'Push-up',
-    description: 'Classic push-up exercise',
-    primaryJoints: ['shoulder', 'elbow', 'wrist'],
-    repThreshold: { up: 160, down: 90 },
-    formTips: [
-      'Body in straight line',
-      'Elbows at 45 degrees',
-      'Chest close to ground',
-    ],
-  },
   lateral_shoulder_raises: {
     name: 'lateral_shoulder_raises',
     displayName: 'Lateral Raise',
@@ -61,9 +37,9 @@ export const EXERCISES: Record<ExerciseType, ExerciseConfig> = {
       'Lower with control',
     ],
   },
-  tricep_extensions: {
-    name: 'tricep_extensions',
-    displayName: 'Tricep Extension',
+  triceps_pushdown: {
+    name: 'triceps_pushdown',
+    displayName: 'Triceps Pushdown',
     description: 'Triceps workout',
     primaryJoints: ['shoulder', 'elbow', 'wrist'],
     repThreshold: { up: 160, down: 60 },

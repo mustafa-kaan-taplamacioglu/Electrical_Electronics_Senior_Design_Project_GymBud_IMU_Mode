@@ -16,12 +16,8 @@ from openai import OpenAI
 import subprocess
 import sys
 import copy
-try:
-    import websockets
-    WEBSOCKETS_AVAILABLE = True
-except ImportError:
-    WEBSOCKETS_AVAILABLE = False
-    print("⚠️  websockets not available, direct IMU bridge connection disabled")
+import websockets
+WEBSOCKETS_AVAILABLE = True
 
 # Dataset collection (optional)
 try:
@@ -46,6 +42,15 @@ try:
 except ImportError:
     ML_TRAINING_ENABLED = False
     print("⚠️  ML training disabled (ml_trainer not found)")
+
+# ML Inference (optional)
+try:
+    from model_inference import ModelInference
+    from ml_inference_helper import calculate_baseline_similarity, calculate_hybrid_correction_score, load_baselines
+    ML_INFERENCE_ENABLED = True
+except ImportError as e:
+    ML_INFERENCE_ENABLED = False
+    print(f"⚠️  ML inference disabled: {e}")
 
 # Dataset Tracker (optional)
 try:
@@ -83,62 +88,49 @@ def init_openai(api_key: str):
 
 
 # Exercise configs with required landmarks for calibration
+# Only 6 exercises: bicep_curls, dumbbell_shoulder_press, lateral_shoulder_raises, triceps_pushdown, dumbbell_rows, squats
 EXERCISE_CONFIG = {
     "bicep_curls": {
         "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
         "rep_threshold": {"up": 60, "down": 140},
-        # Upper body: shoulders, elbows, wrists, hips
-        "required_landmarks": [11, 12, 13, 14, 15, 16, 23, 24],
-        "calibration_message": "Upper body must be visible (shoulders, arms, waist)",
-    },
-    "squats": {
-        "joints": {"left": (23, 25, 27), "right": (24, 26, 28)},
-        "rep_threshold": {"up": 160, "down": 90},
-        # Full lower body: hips, knees, ankles + shoulders for reference
-        "required_landmarks": [11, 12, 23, 24, 25, 26, 27, 28],
-        "calibration_message": "Full body must be visible (shoulders to feet)",
-    },
-    "lunges": {
-        "joints": {"left": (23, 25, 27), "right": (24, 26, 28)},
-        "rep_threshold": {"up": 160, "down": 90},
-        # Same as squats
-        "required_landmarks": [11, 12, 23, 24, 25, 26, 27, 28],
-        "calibration_message": "Full body must be visible (shoulders to feet)",
-    },
-    "pushups": {
-        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
-        "rep_threshold": {"up": 160, "down": 90},
-        # Upper body from side + body line
-        "required_landmarks": [11, 12, 13, 14, 15, 16, 23, 24, 25, 26],
-        "calibration_message": "Side view required (shoulders, arms, hips, knees)",
-    },
-    "lateral_shoulder_raises": {
-        "joints": {"left": (23, 11, 13), "right": (24, 12, 14)},
-        "rep_threshold": {"up": 80, "down": 20},
-        # Full upper body including torso
-        "required_landmarks": [11, 12, 13, 14, 15, 16, 23, 24],
-        "calibration_message": "Upper body must be visible (shoulders, arms, waist)",
-    },
-    "tricep_extensions": {
-        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
-        "rep_threshold": {"up": 160, "down": 60},
-        # Upper body focused on arms
-        "required_landmarks": [11, 12, 13, 14, 15, 16],
-        "calibration_message": "Upper body must be visible (shoulders and arms)",
-    },
-    "dumbbell_rows": {
-        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
-        "rep_threshold": {"up": 60, "down": 150},
-        # Upper body + hips for posture
-        "required_landmarks": [11, 12, 13, 14, 15, 16, 23, 24],
-        "calibration_message": "Upper body must be visible (shoulders, arms, waist)",
+        # Upper body: Face (0-10), Upper Body (11-16), Hands (17-22) = 23 landmarks
+        "required_landmarks": list(range(0, 23)),  # 0-22: Face + Upper Body + Hands
+        "calibration_message": "Face, upper body, and hands must be visible",
     },
     "dumbbell_shoulder_press": {
         "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
         "rep_threshold": {"up": 160, "down": 90},
-        # Upper body for overhead press
-        "required_landmarks": [11, 12, 13, 14, 15, 16, 23, 24],
-        "calibration_message": "Upper body must be visible (shoulders, arms, waist)",
+        # Upper body: Face (0-10), Upper Body (11-16), Hands (17-22) = 23 landmarks
+        "required_landmarks": list(range(0, 23)),  # 0-22: Face + Upper Body + Hands
+        "calibration_message": "Face, upper body, and hands must be visible",
+    },
+    "lateral_shoulder_raises": {
+        "joints": {"left": (23, 11, 13), "right": (24, 12, 14)},
+        "rep_threshold": {"up": 80, "down": 20},
+        # Upper body: Face (0-10), Upper Body (11-16), Hands (17-22) = 23 landmarks
+        "required_landmarks": list(range(0, 23)),  # 0-22: Face + Upper Body + Hands
+        "calibration_message": "Face, upper body, and hands must be visible",
+    },
+    "triceps_pushdown": {
+        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
+        "rep_threshold": {"up": 160, "down": 60},
+        # Upper body: Face (0-10), Upper Body (11-16), Hands (17-22) = 23 landmarks
+        "required_landmarks": list(range(0, 23)),  # 0-22: Face + Upper Body + Hands
+        "calibration_message": "Face, upper body, and hands must be visible",
+    },
+    "dumbbell_rows": {
+        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
+        "rep_threshold": {"up": 60, "down": 150},
+        # Full body: All 33 landmarks (0-32)
+        "required_landmarks": list(range(0, 33)),  # 0-32: All landmarks
+        "calibration_message": "Full body must be visible",
+    },
+    "squats": {
+        "joints": {"left": (23, 25, 27), "right": (24, 26, 28)},
+        "rep_threshold": {"up": 160, "down": 90},
+        # Full body: All 33 landmarks (0-32)
+        "required_landmarks": list(range(0, 33)),  # 0-32: All landmarks
+        "calibration_message": "Full body must be visible",
     },
     "dev_mode": {
         "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
@@ -386,8 +378,8 @@ class FormAnalyzer:
             if (avg[11].get('calibrated', False) and avg[12].get('calibrated', False) and 
                 avg[23].get('calibrated', False) and avg[24].get('calibrated', False)):
                 self.torso_height = abs(
-                    (avg[11]['y'] + avg[12]['y']) / 2 -
-                    (avg[23]['y'] + avg[24]['y']) / 2
+                (avg[11]['y'] + avg[12]['y']) / 2 -
+                (avg[23]['y'] + avg[24]['y']) / 2
                 )
             else:
                 self.torso_height = None
@@ -395,14 +387,14 @@ class FormAnalyzer:
             # Arm lengths
             if avg[11].get('calibrated', False) and avg[13].get('calibrated', False):
                 self.upper_arm_length = np.sqrt(
-                    (avg[11]['x'] - avg[13]['x'])**2 + (avg[11]['y'] - avg[13]['y'])**2
+                (avg[11]['x'] - avg[13]['x'])**2 + (avg[11]['y'] - avg[13]['y'])**2
                 )
             else:
                 self.upper_arm_length = None
             
             if avg[13].get('calibrated', False) and avg[15].get('calibrated', False):
                 self.forearm_length = np.sqrt(
-                    (avg[13]['x'] - avg[15]['x'])**2 + (avg[13]['y'] - avg[15]['y'])**2
+                (avg[13]['x'] - avg[15]['x'])**2 + (avg[13]['y'] - avg[15]['y'])**2
                 )
             else:
                 self.forearm_length = None
@@ -410,14 +402,14 @@ class FormAnalyzer:
             # Leg lengths
             if avg[23].get('calibrated', False) and avg[25].get('calibrated', False):
                 self.thigh_length = np.sqrt(
-                    (avg[23]['x'] - avg[25]['x'])**2 + (avg[23]['y'] - avg[25]['y'])**2
+                (avg[23]['x'] - avg[25]['x'])**2 + (avg[23]['y'] - avg[25]['y'])**2
                 )
             else:
                 self.thigh_length = None
             
             if avg[25].get('calibrated', False) and avg[27].get('calibrated', False):
                 self.shin_length = np.sqrt(
-                    (avg[25]['x'] - avg[27]['x'])**2 + (avg[25]['y'] - avg[27]['y'])**2
+                (avg[25]['x'] - avg[27]['x'])**2 + (avg[25]['y'] - avg[27]['y'])**2
                 )
             else:
                 self.shin_length = None
@@ -567,16 +559,16 @@ class FormAnalyzer:
                 left_shoulder_init = init.get('left_shoulder')
                 if left_shoulder_init:
                     left_rise = left_shoulder_init['y'] - lm[11]['y']
-                if left_rise > rise_tolerance:
-                    arms_issues.append('Sol omuz kalkıyor')
-                    arms_scores.append(max(50, 100 - (left_rise / rise_tolerance) * 25))
-                
+            if left_rise > rise_tolerance:
+                arms_issues.append('Sol omuz kalkıyor')
+                arms_scores.append(max(50, 100 - (left_rise / rise_tolerance) * 25))
+            
                 right_shoulder_init = init.get('right_shoulder')
                 if right_shoulder_init:
                     right_rise = right_shoulder_init['y'] - lm[12]['y']
-                if right_rise > rise_tolerance:
-                    arms_issues.append('Sağ omuz kalkıyor')
-                    arms_scores.append(max(50, 100 - (right_rise / rise_tolerance) * 25))
+            if right_rise > rise_tolerance:
+                arms_issues.append('Sağ omuz kalkıyor')
+                arms_scores.append(max(50, 100 - (right_rise / rise_tolerance) * 25))
             
             # 5. Elbow above shoulder (critical - means arm is raised, not curling)
             if lm[13]['y'] < lm[11]['y'] - 0.03:
@@ -724,205 +716,6 @@ class FormAnalyzer:
             scores.extend(core_scores)
             scores.extend(head_scores)
         
-        # === LUNGES ===
-        elif self.exercise == 'lunges':
-            # --- LEGS REGION ---
-            # Determine which leg is forward (lower knee y = front leg)
-            left_knee_y = lm[25]['y']
-            right_knee_y = lm[26]['y']
-            front_leg = 'left' if left_knee_y > right_knee_y else 'right'
-            
-            # 1. Front thigh angle (should approach horizontal at bottom)
-            front_thigh = 'left_thigh' if front_leg == 'left' else 'right_thigh'
-            front_thigh_angle = get_bone_angle_from_horizontal(landmarks, front_thigh)
-            
-            # 2. Front shin angle (should be close to vertical)
-            front_shin = 'left_shin' if front_leg == 'left' else 'right_shin'
-            front_shin_angle = get_bone_angle_from_vertical(landmarks, front_shin)
-            
-            if front_shin_angle > 25:
-                legs_issues.append(f'Ön bacak çok eğik ({front_shin_angle:.0f}°)')
-                legs_scores.append(max(55, 100 - front_shin_angle * 1.5))
-            
-            # 3. Back thigh angle (should be close to vertical)
-            back_thigh = 'right_thigh' if front_leg == 'left' else 'left_thigh'
-            back_thigh_angle = get_bone_angle_from_vertical(landmarks, back_thigh)
-            
-            if back_thigh_angle > 40:
-                legs_issues.append('Arka bacak daha dik olmalı')
-                legs_scores.append(max(60, 100 - back_thigh_angle))
-            
-            # 4. Knee over ankle (front knee shouldn't go past toes)
-            front_knee_idx = 25 if front_leg == 'left' else 26
-            front_ankle_idx = 27 if front_leg == 'left' else 28
-            knee_ankle_diff = lm[front_knee_idx]['x'] - lm[front_ankle_idx]['x']
-            
-            if abs(knee_ankle_diff) > 0.08:
-                legs_issues.append('Diz ayak bileğini geçiyor')
-                legs_scores.append(55)
-            
-            # Knee angles symmetry
-            left_knee_angle = get_angle_between_bones(landmarks, 'left_thigh', 'left_shin')
-            right_knee_angle = get_angle_between_bones(landmarks, 'right_thigh', 'right_shin')
-            if abs(left_knee_angle - right_knee_angle) > 20:
-                legs_issues.append('Dizler asimetrik')
-                legs_scores.append(65)
-            
-            # --- CORE REGION ---
-            # 4. Torso upright (both torso lines should be near vertical)
-            left_torso_angle = get_bone_angle_from_vertical(landmarks, 'left_torso')
-            right_torso_angle = get_bone_angle_from_vertical(landmarks, 'right_torso')
-            avg_torso_angle = (left_torso_angle + right_torso_angle) / 2
-            
-            if avg_torso_angle > 20:
-                core_issues.append(f'Gövde dik durmalı ({avg_torso_angle:.0f}°)')
-                core_scores.append(max(50, 100 - avg_torso_angle * 2))
-            
-            # 6. Hips square (hip line should be horizontal)
-            hips_angle = get_bone_angle_from_horizontal(landmarks, 'hips')
-            if hips_angle > 15:
-                core_issues.append('Kalçalar eşit seviyede değil')
-                core_scores.append(max(65, 100 - hips_angle * 2))
-            
-            # Hip shift
-            hip_shift = abs((lm[23]['x'] + lm[24]['x']) / 2 - init['spine_center']['x'])
-            if hip_shift > self.hip_width * 0.15:
-                core_issues.append('Kalça kayıyor')
-                core_scores.append(max(50, 100 - hip_shift / self.hip_width * 100))
-            
-            # Shoulders level
-            shoulders_angle = get_bone_angle_from_horizontal(landmarks, 'shoulders')
-            if shoulders_angle > 10:
-                core_issues.append('Omuzlar eğik')
-                core_scores.append(max(70, 100 - shoulders_angle * 2))
-            
-            # --- HEAD REGION ---
-            head_y = lm[0]['y']
-            shoulder_y = (lm[11]['y'] + lm[12]['y']) / 2
-            if head_y < shoulder_y - 0.2:
-                head_issues.append('Kafan çok öne eğik')
-                head_scores.append(60)
-            
-            # --- ARMS REGION ---
-            # Arms should be relatively stable (less critical for lunges)
-            left_arm_angle = get_angle_between_bones(landmarks, 'left_upper_arm', 'left_forearm')
-            right_arm_angle = get_angle_between_bones(landmarks, 'right_upper_arm', 'right_forearm')
-            if abs(left_arm_angle - right_arm_angle) > 20:
-                arms_issues.append('Kollar asimetrik')
-                arms_scores.append(75)
-            
-            # Combine all regional issues and scores
-            issues.extend(arms_issues)
-            issues.extend(legs_issues)
-            issues.extend(core_issues)
-            issues.extend(head_issues)
-            scores.extend(arms_scores)
-            scores.extend(legs_scores)
-            scores.extend(core_scores)
-            scores.extend(head_scores)
-        
-        # === PUSHUPS ===
-        elif self.exercise == 'pushups':
-            # --- ARMS REGION ---
-            # 2. Upper arm angle (elbow position)
-            # At bottom of pushup, upper arm should be ~45° from body
-            left_upper_arm_angle = get_bone_angle_from_horizontal(landmarks, 'left_upper_arm')
-            right_upper_arm_angle = get_bone_angle_from_horizontal(landmarks, 'right_upper_arm')
-            
-            # 3. Elbow angle (between upper arm and forearm)
-            left_elbow_angle = get_angle_between_bones(landmarks, 'left_upper_arm', 'left_forearm')
-            right_elbow_angle = get_angle_between_bones(landmarks, 'right_upper_arm', 'right_forearm')
-            
-            # Elbow symmetry
-            if abs(left_elbow_angle - right_elbow_angle) > 15:
-                arms_issues.append('Dirsekler asimetrik')
-                arms_scores.append(65)
-            
-            # 4. Elbow flare (upper arms shouldn't go too wide)
-            elbow_width = abs(lm[13]['x'] - lm[14]['x'])
-            shoulder_width_current = abs(lm[11]['x'] - lm[12]['x'])
-            
-            if elbow_width > shoulder_width_current * 1.8:
-                arms_issues.append('Dirsekler çok açık - vücuda yakın tut')
-                arms_scores.append(50)
-            
-            # Wrist position
-            if abs(lm[15]['y'] - lm[16]['y']) > 0.1:
-                arms_issues.append('Bilekler eşit seviyede değil')
-                arms_scores.append(70)
-            
-            # --- CORE REGION ---
-            # 1. Body line check using torso and thigh angles
-            # In a proper pushup, body should form a straight line
-            left_torso_angle = get_bone_angle_from_horizontal(landmarks, 'left_torso')
-            left_thigh_angle = get_bone_angle_from_horizontal(landmarks, 'left_thigh')
-            
-            # Torso and thigh should have similar angles (straight line)
-            body_line_diff = abs(left_torso_angle - left_thigh_angle)
-            
-            if body_line_diff > 20:
-                if left_thigh_angle > left_torso_angle:
-                    core_issues.append('Kalça çöküyor - vücut çizgisini koru')
-                    core_scores.append(max(40, 100 - body_line_diff * 2))
-                else:
-                    core_issues.append('Kalça çok yüksek')
-                    core_scores.append(max(50, 100 - body_line_diff * 2))
-            
-            # 6. Shoulder symmetry
-            shoulders_angle = get_bone_angle_from_horizontal(landmarks, 'shoulders')
-            if shoulders_angle > 12:
-                core_issues.append('Omuzlar eşit seviyede değil')
-                core_scores.append(max(60, 100 - shoulders_angle * 3))
-            
-            # Torso stability
-            left_torso_vert = get_bone_angle_from_vertical(landmarks, 'left_torso')
-            right_torso_vert = get_bone_angle_from_vertical(landmarks, 'right_torso')
-            if abs(left_torso_vert - right_torso_vert) > 10:
-                core_issues.append('Gövde yana kayıyor')
-                core_scores.append(60)
-            
-            # --- HEAD REGION ---
-            # 5. Head position (should be neutral, not drooping)
-            head_y = lm[0]['y']
-            shoulder_y = (lm[11]['y'] + lm[12]['y']) / 2
-            
-            if head_y > shoulder_y + 0.1:
-                head_issues.append('Kafanı kaldır')
-                head_scores.append(65)
-            elif head_y < shoulder_y - 0.15:
-                head_issues.append('Kafan çok aşağıda')
-                head_scores.append(70)
-            
-            # Head alignment with body line
-            head_x = lm[0]['x']
-            shoulder_center_x = (lm[11]['x'] + lm[12]['x']) / 2
-            if abs(head_x - shoulder_center_x) > 0.1:
-                head_issues.append('Kafa vücut çizgisinde değil')
-                head_scores.append(75)
-            
-            # --- LEGS REGION ---
-            # Legs should be straight and stable
-            left_knee_angle = get_angle_between_bones(landmarks, 'left_thigh', 'left_shin')
-            right_knee_angle = get_angle_between_bones(landmarks, 'right_thigh', 'right_shin')
-            
-            if left_knee_angle < 160 or right_knee_angle < 160:
-                legs_issues.append('Bacaklar düz tutulmalı')
-                legs_scores.append(60)
-            
-            if abs(left_knee_angle - right_knee_angle) > 15:
-                legs_issues.append('Bacaklar asimetrik')
-                legs_scores.append(65)
-            
-            # Combine all regional issues and scores
-            issues.extend(arms_issues)
-            issues.extend(legs_issues)
-            issues.extend(core_issues)
-            issues.extend(head_issues)
-            scores.extend(arms_scores)
-            scores.extend(legs_scores)
-            scores.extend(core_scores)
-            scores.extend(head_scores)
-        
         # === LATERAL SHOULDER RAISES ===
         elif self.exercise == 'lateral_shoulder_raises':
             # --- ARMS REGION ---
@@ -969,10 +762,10 @@ class FormAnalyzer:
                 left_rise = init['left_shoulder']['y'] - lm[11]['y']
                 right_rise = init['right_shoulder']['y'] - lm[12]['y']
                 rise_tolerance = self.torso_height * 0.08
-                
-                if left_rise > rise_tolerance or right_rise > rise_tolerance:
-                    core_issues.append("Omuzlar kalkıyor - omuzları aşağıda tut")
-                    core_scores.append(50)
+            
+            if left_rise > rise_tolerance or right_rise > rise_tolerance:
+                core_issues.append("Omuzlar kalkıyor - omuzları aşağıda tut")
+                core_scores.append(50)
             
             # 5. Torso stability (shouldn't lean to compensate)
             left_torso_angle = get_bone_angle_from_vertical(landmarks, 'left_torso')
@@ -1027,7 +820,7 @@ class FormAnalyzer:
             scores.extend(head_scores)
         
         # === TRICEP EXTENSIONS ===
-        elif self.exercise == 'tricep_extensions':
+        elif self.exercise == 'triceps_pushdown':
             # --- ARMS REGION ---
             # 1. Upper arm angle (should be close to vertical, pointing up)
             left_upper_arm_angle = get_bone_angle_from_vertical(landmarks, 'left_upper_arm')
@@ -1192,9 +985,9 @@ class FormAnalyzer:
             # 6. Shoulder rotation (shouldn't twist)
             if self.torso_height is not None:
                 shoulder_y_diff = abs(lm[11]['y'] - lm[12]['y'])
-                if shoulder_y_diff > self.torso_height * 0.12:
-                    core_issues.append('Omuzlar dönüyor - sabit tut')
-                    core_scores.append(max(50, 100 - shoulder_y_diff / self.torso_height * 150))
+            if shoulder_y_diff > self.torso_height * 0.12:
+                core_issues.append('Omuzlar dönüyor - sabit tut')
+                core_scores.append(max(50, 100 - shoulder_y_diff / self.torso_height * 150))
             
             # Hip stability
             hip_shift = abs((lm[23]['x'] + lm[24]['x']) / 2 - init['spine_center']['x'])
@@ -1361,15 +1154,12 @@ class FormAnalyzer:
         head_score = sum(head_scores) / len(head_scores) if head_scores else 100
         
         # Calculate final score (weighted average based on exercise type)
-        if self.exercise in ['bicep_curls', 'lateral_shoulder_raises', 'tricep_extensions', 'dumbbell_shoulder_press']:
+        if self.exercise in ['bicep_curls', 'lateral_shoulder_raises', 'triceps_pushdown', 'dumbbell_shoulder_press']:
             # Upper body exercises: arms 50%, core 30%, head 10%, legs 10%
             final_score = (arms_score * 0.5 + core_score * 0.3 + head_score * 0.1 + legs_score * 0.1)
-        elif self.exercise in ['squats', 'lunges']:
+        elif self.exercise == 'squats':
             # Lower body exercises: legs 50%, core 40%, arms 5%, head 5%
             final_score = (legs_score * 0.5 + core_score * 0.4 + arms_score * 0.05 + head_score * 0.05)
-        elif self.exercise == 'pushups':
-            # Full body: core 40%, arms 40%, legs 15%, head 5%
-            final_score = (core_score * 0.4 + arms_score * 0.4 + legs_score * 0.15 + head_score * 0.05)
         elif self.exercise == 'dumbbell_rows':
             # Back exercise: core 45%, arms 40%, head 10%, legs 5%
             final_score = (core_score * 0.45 + arms_score * 0.4 + head_score * 0.1 + legs_score * 0.05)
@@ -1417,10 +1207,8 @@ class RepCounter:
     ANGLE_REQUIREMENTS = {
         'bicep_curls': {'min': 40, 'max': 160, 'range_pct': 0.7},
         'squats': {'min': 75, 'max': 165, 'range_pct': 0.6},
-        'lunges': {'min': 80, 'max': 160, 'range_pct': 0.6},
-        'pushups': {'min': 75, 'max': 160, 'range_pct': 0.6},
         'lateral_shoulder_raises': {'min': 20, 'max': 80, 'range_pct': 0.7},
-        'tricep_extensions': {'min': 50, 'max': 160, 'range_pct': 0.6},
+        'triceps_pushdown': {'min': 50, 'max': 160, 'range_pct': 0.6},
         'dumbbell_rows': {'min': 50, 'max': 155, 'range_pct': 0.6},
         'dumbbell_shoulder_press': {'min': 80, 'max': 165, 'range_pct': 0.6},
     }
@@ -1550,38 +1338,6 @@ class RepCounter:
                     self.phase = 'down'
                     result = self.complete_rep()
         
-        elif self.exercise == 'lunges':
-            # BONE-BASED LUNGE REP COUNTING
-            if landmarks:
-                # Use front thigh angle
-                left_thigh_angle = get_bone_angle_from_horizontal(landmarks, 'left_thigh')
-                right_thigh_angle = get_bone_angle_from_horizontal(landmarks, 'right_thigh')
-                # Front leg has lower thigh angle
-                front_thigh_angle = min(left_thigh_angle, right_thigh_angle)
-                
-                if self.phase == 'down' and front_thigh_angle < 25:  # Deep lunge
-                    self.phase = 'up'
-                elif self.phase == 'up' and front_thigh_angle > 55:  # Standing
-                    self.phase = 'down'
-                    result = self.complete_rep()
-        
-        elif self.exercise == 'pushups':
-            # BONE-BASED PUSHUP REP COUNTING
-            if landmarks:
-                # Use elbow angle (between upper arm and forearm)
-                left_elbow_angle = get_angle_between_bones(landmarks, 'left_upper_arm', 'left_forearm')
-                right_elbow_angle = get_angle_between_bones(landmarks, 'right_upper_arm', 'right_forearm')
-                elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
-                
-                # Down position: elbow ~90°
-                # Up position: elbow ~170°
-                
-                if self.phase == 'down' and elbow_angle < 100:  # Bottom of pushup
-                    self.phase = 'up'
-                elif self.phase == 'up' and elbow_angle > 160:  # Top of pushup
-                    self.phase = 'down'
-                    result = self.complete_rep()
-        
         elif self.exercise == 'lateral_shoulder_raises':
             # BONE-BASED LATERAL RAISE REP COUNTING
             if landmarks:
@@ -1599,7 +1355,7 @@ class RepCounter:
                     self.phase = 'down'
                     result = self.complete_rep()
         
-        elif self.exercise == 'tricep_extensions':
+        elif self.exercise == 'triceps_pushdown':
             # BONE-BASED TRICEP EXTENSION REP COUNTING
             if landmarks:
                 # Use elbow angle
@@ -1692,6 +1448,302 @@ CORRECTION_TEMPLATES = [
 ]
 
 import random
+
+# EXERCISE FEEDBACK LIBRARY - 72 feedback options (6 exercises x 12 categories)
+EXERCISE_FEEDBACK_LIBRARY = {
+    'bicep_curls': {
+        1: "🎉 Mükemmel biceps curl! Form, hız ve kontrol harika. Devam et!",
+        2: "💪 Çok iyi! Dirsekler sabit, hareket kontrollü. İyi gidiyorsun!",
+        3: "👍 İyi form, dirseklerin biraz daha sabit kalmalı. Küçük bir iyileştirme yap.",
+        4: "✅ İyi gidiyorsun, omuzların daha düşük kalmalı. Gövdeni sabitle.",
+        5: "⚠️ Orta seviye, dirsekleri gövdene sabitle. Daha kontrollü hareket et.",
+        6: "🔴 Kollarına odaklan: dirsekleri sabit tut, sallama. Gövdeni sabitle.",
+        7: "🔴 Gövdeni sabitle, öne eğilme. Dikey dur ve dirsekleri sabit tut.",
+        8: "🔴 Kafanı nötr tut, aşağı bakma. İleri bak, boynunu rahatlat.",
+        9: "🔴 Birkaç sorun var: dirsekleri sabitle ve gövdeni düz tut. Yavaşla.",
+        10: "🟡 Hareketi tamamla, kolları tam uzat. Tam hareket menzili kullan.",
+        11: "🟡 Kontrolü artır, daha yavaş ve kontrollü hareket et. Acele etme.",
+        12: "🔴 Dirseklerin omuzun üstüne çıkmasın, daha düşük tut. Yanlış açıda hareket ediyorsun."
+    },
+    'squats': {
+        1: "🎉 Mükemmel squat! Derinlik ve form harika. Mükemmel çalışma!",
+        2: "💪 Çok iyi! Dizler ayak parmaklarının üzerinde, gövde düz. İyi gidiyorsun!",
+        3: "👍 İyi form, biraz daha derine inebilirsin. Derinliği artır.",
+        4: "✅ İyi gidiyorsun, gövdeni daha dik tut. Omurganı düzleştir.",
+        5: "⚠️ Orta seviye, dizlerin içe düşmesin. Dizlerini dışarı doğru it.",
+        6: "🔴 Bacaklarına odaklan: dizleri dışarı doğru it. İçe çökmesin.",
+        7: "🔴 Gövdeni düz tut, öne çok eğilme. Dikey dur, göğsünü kaldır.",
+        8: "🔴 İleri bak, kafanı öne eğme. Gözlerin öne baksın.",
+        9: "🔴 Birkaç sorun var: diz pozisyonu ve gövde düzgünlüğüne dikkat. Yavaşla.",
+        10: "🟡 Daha derine in, kalçalar diz seviyesinin altına gelsin. Derinlik artır.",
+        11: "🟡 Kontrolü artır, yavaş ve kontrollü hareket et. Acele etme.",
+        12: "🔴 Dizlerin içe çökmesin! Ayak parmaklarınla hizalı tut, dışarı doğru it."
+    },
+    'lateral_shoulder_raises': {
+        1: "🎉 Mükemmel lateral raise! Omuz kontrolü harika. Devam et!",
+        2: "💪 Çok iyi! Kollar omuz hizasında, simetrik. İyi gidiyorsun!",
+        3: "👍 İyi form, kolları biraz daha simetrik kaldır. Eşit yüksekliğe getir.",
+        4: "✅ İyi gidiyorsun, omuzların yukarı kalkmasın. Omuzları düşük tut.",
+        5: "⚠️ Orta seviye, kolları omuz hizasına kadar kaldır. Yeterince yükseğe çık.",
+        6: "🔴 Kollarına odaklan: simetrik kaldır, eşit yüksekliğe getir. Asimetri var.",
+        7: "🔴 Gövdeni sabitle, sallanma. Dikey dur, core'unu sık.",
+        8: "🔴 Kafanı nötr tut, yukarı bakma. İleri bak, boynunu rahatlat.",
+        9: "🔴 Birkaç sorun var: simetrik kaldır ve gövdeni sabitle. Yavaşla.",
+        10: "🟡 Kolları omuz hizasına kadar kaldır, daha yukarı çıkar. Tam menzil kullan.",
+        11: "🟡 Kontrolü artır, omuzları silkmeyi bırak. Yavaş ve kontrollü hareket et.",
+        12: "🔴 Omuzlarını yukarı kaldırma! Sadece kolları kaldır, omuzlar düşük kalsın."
+    },
+    'triceps_pushdown': {
+        1: "🎉 Mükemmel triceps pushdown! Üst kol sabit, form harika. Devam et!",
+        2: "💪 Çok iyi! Üst kol sabit, sadece dirsek hareket ediyor. İyi gidiyorsun!",
+        3: "👍 İyi form, üst kolunu biraz daha sabit tut. Sallanmayı azalt.",
+        4: "✅ İyi gidiyorsun, dirseği tam aç. Tam hareket menzili kullan.",
+        5: "⚠️ Orta seviye, üst kolunu sabit tut, sallama. Kontrolü artır.",
+        6: "🔴 Kollarına odaklan: üst kol sabit, sadece dirsek hareket etsin. Sallama.",
+        7: "🔴 Gövdeni sabitle, öne eğilme. Dikey dur, core'unu sık.",
+        8: "🔴 Kafanı nötr tut, aşağı bakma. İleri bak, boynunu rahatlat.",
+        9: "🔴 Birkaç sorun var: üst kol sabitliği ve gövde pozisyonuna dikkat. Yavaşla.",
+        10: "🟡 Dirseği tam aç, kolları tam uzat. Tam hareket menzili kullan.",
+        11: "🟡 Kontrolü artır, yavaş ve kontrollü hareket et. Acele etme.",
+        12: "🔴 Üst kolunu sabit tut! Sadece ön kol hareket etmeli, üst kol sabit kalmalı."
+    },
+    'dumbbell_rows': {
+        1: "🎉 Mükemmel row! Sırt kasların aktif, form harika. Devam et!",
+        2: "💪 Çok iyi! Gövde sabit, kürek kemikleri sıkılıyor. İyi gidiyorsun!",
+        3: "👍 İyi form, gövdeni biraz daha sabit tut. Sallanmayı azalt.",
+        4: "✅ İyi gidiyorsun, dirseği vücuda daha yakın çek. Daha yakın tut.",
+        5: "⚠️ Orta seviye, sırtını düz tut, eğilme. Gövdeni sabitle.",
+        6: "🔴 Gövdeni sabitle, sırtını düz tut. Öne çok eğilme, düz kal.",
+        7: "🔴 Kollarına odaklan: dirseği vücuda yakın çek. Daha yakın tut.",
+        8: "🔴 Kafanı nötr tut, boynunu eğme. İleri bak, boynunu rahatlat.",
+        9: "🔴 Birkaç sorun var: sırt düzgünlüğü ve dirsek pozisyonuna dikkat. Yavaşla.",
+        10: "🟡 Daha geriye çek, kürek kemiklerini sıkıştır. Tam menzil kullan.",
+        11: "🟡 Kontrolü artır, yavaş ve kontrollü hareket et. Acele etme.",
+        12: "🔴 Sırtını düz tut, fazla kavisli olmasın! Omurganı nötr tut."
+    },
+    'dumbbell_shoulder_press': {
+        1: "🎉 Mükemmel shoulder press! Core aktif, form harika. Devam et!",
+        2: "💪 Çok iyi! Kollar tam yukarı, gövde sabit. İyi gidiyorsun!",
+        3: "👍 İyi form, kolları biraz daha tam yukarı it. Tam aç.",
+        4: "✅ İyi gidiyorsun, gövdeni daha sabit tut. Core'unu sık.",
+        5: "⚠️ Orta seviye, core'unu sık, sırtına yaslanma. Dikey dur.",
+        6: "🔴 Kollarına odaklan: tam yukarı it, tam aç. Yeterince yukarı çıkmıyor.",
+        7: "🔴 Gövdeni sabitle, core'unu sık. Sallanmayı azalt.",
+        8: "🔴 Kafanı nötr tut, yukarı bakma. İleri bak, boynunu rahatlat.",
+        9: "🔴 Birkaç sorun var: core stabilitesi ve kol hareketi düzgünlüğüne dikkat. Yavaşla.",
+        10: "🟡 Kolları tam yukarı it, tam aç. Tam hareket menzili kullan.",
+        11: "🟡 Kontrolü artır, yavaş ve kontrollü hareket et. Acele etme.",
+        12: "🔴 Arkaya yaslanma! Gövdeni dik tut, core'unu sık. Öne eğilme."
+    }
+}
+
+
+def select_feedback_category(
+    exercise: str,
+    score: float,
+    regional_scores: dict,
+    regional_issues: dict,
+    min_angle: float = None,
+    max_angle: float = None,
+    ml_prediction: dict = None,
+    imu_data: dict = None,
+    landmarks: list = None,
+    initial_positions: dict = None,
+    fusion_mode: str = 'camera_primary'  # 'camera_only', 'imu_only', 'camera_primary'
+) -> int:
+    """
+    Select appropriate feedback category (1-12) based on ML predictions, scores, IMU data, and landmarks.
+    Supports Camera-only, IMU-only, and Sensor Fusion modes.
+    
+    Args:
+        exercise: Exercise name
+        score: Overall form score (0-100)
+        regional_scores: Dict with regional scores {'arms': float, 'legs': float, ...}
+        regional_issues: Dict with regional issues {'arms': [str, ...], ...}
+        min_angle: Minimum angle during rep
+        max_angle: Maximum angle during rep
+        ml_prediction: ML model prediction dict (regional scores) - from camera or fusion
+        imu_data: IMU data dict (left_wrist, right_wrist, chest)
+        landmarks: Raw landmark data (list of 33 landmarks)
+        initial_positions: Calibration initial positions
+        fusion_mode: 'camera_only', 'imu_only', or 'camera_primary' (sensor fusion)
+    
+    Returns:
+        Feedback category ID (1-12)
+    """
+    # Use ML prediction if available (preferred - works for all modes)
+    if ml_prediction and isinstance(ml_prediction, dict) and 'arms' in ml_prediction:
+        score = sum(ml_prediction.values()) / len(ml_prediction)
+        regional_scores = ml_prediction
+    
+    # Calculate range of motion
+    rom = None
+    if min_angle is not None and max_angle is not None:
+        rom = max_angle - min_angle
+    
+    # Expected ROM ranges per exercise
+    expected_rom = {
+        'bicep_curls': (90, 120),
+        'squats': (70, 100),
+        'lateral_shoulder_raises': (50, 80),
+        'triceps_pushdown': (80, 120),
+        'dumbbell_rows': (80, 110),
+        'dumbbell_shoulder_press': (60, 90)
+    }
+    
+    # Category 1: Perfect Form (Score >=95, no issues)
+    if score >= 95 and not any(regional_issues.values() if regional_issues else []):
+        return 1
+    
+    # Category 2: Excellent Form (Score 90-94)
+    if score >= 90:
+        return 2
+    
+    # Category 3: Good - Minor Issues (Score 85-89)
+    if score >= 85:
+        return 3
+    
+    # Category 4: Good - Needs Improvement (Score 80-84)
+    if score >= 80:
+        return 4
+    
+    # Category 5: Moderate Form (Score 70-79)
+    if score >= 70:
+        return 5
+    
+    # Category 11: Range Too Limited (works for all modes - uses angle data)
+    if rom is not None and expected_rom.get(exercise):
+        exp_min, exp_max = expected_rom[exercise]
+        if rom < exp_min * 0.8:
+            return 11
+    
+    # Category 12: Range Too Wide or specific landmark-based issues
+    if rom is not None and expected_rom.get(exercise):
+        exp_min, exp_max = expected_rom[exercise]
+        if rom > exp_max * 1.2:
+            return 12
+    
+    # ✅ Landmark-based checks (Camera mode or Fusion mode)
+    if (fusion_mode in ['camera_only', 'camera_primary']) and landmarks and initial_positions:
+        lm = {i: {'x': landmarks[i]['x'], 'y': landmarks[i]['y']} for i in range(min(len(landmarks), 33))}
+        
+        # Bicep curls - elbow above shoulder check
+        if exercise == 'bicep_curls' and 13 < len(landmarks) and 'left_elbow' in initial_positions:
+            left_elbow_current = lm.get(13, {})
+            left_elbow_init = initial_positions.get('left_elbow', {})
+            if left_elbow_current.get('x') and left_elbow_init.get('x'):
+                elbow_drift = abs(left_elbow_current['x'] - left_elbow_init['x'])
+                if elbow_drift > 0.1:
+                    return 6  # Arms issue
+        
+        # Squats - knee valgus check
+        if exercise == 'squats' and len(landmarks) >= 28:
+            left_knee_x = lm.get(25, {}).get('x', 0)
+            left_ankle_x = lm.get(27, {}).get('x', 0)
+            right_knee_x = lm.get(26, {}).get('x', 0)
+            right_ankle_x = lm.get(28, {}).get('x', 0)
+            
+            knee_width = abs(right_knee_x - left_knee_x)
+            ankle_width = abs(right_ankle_x - left_ankle_x)
+            
+            if ankle_width > 0 and knee_width < ankle_width * 0.8:
+                return 12  # Knee valgus
+    
+    # ✅ IMU-based checks (IMU mode or Fusion mode)
+    if (fusion_mode in ['imu_only', 'camera_primary']) and imu_data:
+        # Check for excessive wrist movement (bicep curls, triceps pushdown)
+        if exercise in ['bicep_curls', 'triceps_pushdown']:
+            left_wrist = imu_data.get('left_wrist', {})
+            right_wrist = imu_data.get('right_wrist', {})
+            
+            # Check gyroscope magnitude (indicates movement)
+            if left_wrist and right_wrist:
+                left_gyro = left_wrist.get('gyro', {})
+                right_gyro = right_wrist.get('gyro', {})
+                
+                if left_gyro and right_gyro:
+                    left_mag = (left_gyro.get('x', 0)**2 + left_gyro.get('y', 0)**2 + left_gyro.get('z', 0)**2)**0.5
+                    right_mag = (right_gyro.get('x', 0)**2 + right_gyro.get('y', 0)**2 + right_gyro.get('z', 0)**2)**0.5
+                    
+                    # High gyro magnitude indicates excessive movement
+                    if left_mag > 500 or right_mag > 500:  # Threshold in deg/s
+                        return 6  # Arms issue - too much movement
+    
+    # Category 10: Multiple Issues (3+ issues across regions)
+    total_issues = sum(len(issues) for issues in (regional_issues.values() if regional_issues else []))
+    if total_issues >= 3:
+        return 10
+    
+    # Category 6-9: Poor Form - Region-specific (Score <70, find lowest region)
+    if score < 70 and regional_scores:
+        min_region = min(regional_scores.items(), key=lambda x: x[1])
+        region_name = min_region[0]
+        
+        region_to_category = {
+            'arms': 6,
+            'legs': 7,
+            'core': 8,
+            'head': 9
+        }
+        return region_to_category.get(region_name, 6)
+    
+    # Default: Category 5 (Moderate)
+    return 5
+
+
+def get_smart_feedback(
+    exercise: str,
+    score: float,
+    regional_scores: dict,
+    regional_issues: dict,
+    min_angle: float = None,
+    max_angle: float = None,
+    ml_prediction: dict = None,
+    imu_data: dict = None,
+    landmarks: list = None,
+    initial_positions: dict = None,
+    fusion_mode: str = 'camera_primary',
+    rep_num: int = 0
+) -> str:
+    """
+    Get smart feedback using ML predictions, IMU data, and landmark analysis.
+    Supports Camera-only, IMU-only, and Sensor Fusion modes.
+    
+    Args:
+        exercise: Exercise name
+        score: Overall form score
+        regional_scores: Regional scores dict
+        regional_issues: Regional issues dict
+        min_angle: Min angle
+        max_angle: Max angle
+        ml_prediction: ML model prediction (regional scores)
+        imu_data: IMU data (left_wrist, right_wrist, chest)
+        landmarks: Raw landmark data
+        initial_positions: Calibration initial positions
+        fusion_mode: 'camera_only', 'imu_only', or 'camera_primary'
+        rep_num: Rep number
+    
+    Returns:
+        Feedback message string
+    """
+    # Select feedback category based on mode
+    category = select_feedback_category(
+        exercise, score, regional_scores, regional_issues,
+        min_angle, max_angle, ml_prediction, imu_data,
+        landmarks=landmarks,
+        initial_positions=initial_positions,
+        fusion_mode=fusion_mode
+    )
+    
+    # Get feedback from library
+    feedback_lib = EXERCISE_FEEDBACK_LIBRARY.get(exercise, {})
+    feedback = feedback_lib.get(category, "Formunu iyileştirmeye devam et.")
+    
+    if rep_num > 0:
+        return f"Rep #{rep_num}: {feedback}"
+    
+    return feedback
+
 
 def get_rule_based_regional_feedback(
     exercise: str,
@@ -1826,59 +1878,34 @@ def get_rule_based_overall_feedback(
     regional_issues: dict = None,
     min_angle: float = None,
     max_angle: float = None,
-    is_valid: bool = True
+    is_valid: bool = True,
+    ml_prediction: dict = None,
+    imu_data: dict = None,
+    landmarks: list = None,
+    initial_positions: dict = None,
+    fusion_mode: str = 'camera_primary'
 ) -> str:
-    """Get rule-based overall feedback using MediaPipe data and scores."""
+    """Get rule-based overall feedback using MediaPipe data, ML predictions, IMU data, and landmarks."""
     if not is_valid:
         if issues:
             return f"Rep #{rep_num}: Geçersiz rep. {issues[0] if issues else 'Form hatası'}."
         return f"Rep #{rep_num}: Geçersiz rep, formunu düzelt."
     
-    # Exercise-specific feedback
-    exercise_names = {
-        'bicep_curls': 'Biceps Curl',
-        'squats': 'Squat',
-        'lunges': 'Lunge',
-        'pushups': 'Push-up',
-        'lateral_shoulder_raises': 'Lateral Raise',
-        'tricep_extensions': 'Triceps Extension',
-        'dumbbell_rows': 'Dumbbell Row',
-        'dumbbell_shoulder_press': 'Shoulder Press'
-    }
-    ex_name = exercise_names.get(exercise, exercise)
-    
-    # High score feedback
-    if score >= 85:
-        if issues:
-            return f"Rep #{rep_num}: Harika! %{score:.0f} form. {issues[0] if issues else ''}"
-        return f"Rep #{rep_num}: Mükemmel! %{score:.0f} form. Devam et!"
-    
-    # Find lowest scoring region for targeted feedback
-    if regional_scores:
-        min_region = min(regional_scores.items(), key=lambda x: x[1])
-        min_region_name = {'arms': 'Kollar', 'legs': 'Bacaklar', 'core': 'Gövde', 'head': 'Kafa'}.get(min_region[0], min_region[0])
-        
-        if min_region[1] < 70:
-            if issues:
-                return f"Rep #{rep_num}: %{score:.0f} form. {min_region_name} bölgesine odaklan: {issues[0] if issues else 'Formunu iyileştir'}."
-            return f"Rep #{rep_num}: %{score:.0f} form. {min_region_name} bölgesini iyileştirmeye odaklan."
-    
-    # Medium score feedback
-    if score >= 70:
-        if issues:
-            return f"Rep #{rep_num}: İyi! %{score:.0f} form. {issues[0] if issues else 'Küçük iyileştirmeler yapabilirsin'}."
-        return f"Rep #{rep_num}: İyi! %{score:.0f} form. Devam et!"
-    
-    # Low score feedback
-    if score >= 50:
-        if issues:
-            return f"Rep #{rep_num}: %{score:.0f} form. {issues[0] if issues else 'Formunu iyileştirmeye odaklan'}."
-        return f"Rep #{rep_num}: %{score:.0f} form. Formunu iyileştirmeye odaklan."
-    
-    # Very low score
-    if issues:
-        return f"Rep #{rep_num}: %{score:.0f} form. {issues[0] if issues else 'Formunu düzeltmeye öncelik ver'}."
-    return f"Rep #{rep_num}: %{score:.0f} form. Yavaşla ve formuna odaklan."
+    # Use smart feedback system (includes ML, IMU, and landmark data)
+    return get_smart_feedback(
+        exercise=exercise,
+        score=score,
+        regional_scores=regional_scores or {},
+        regional_issues=regional_issues or {},
+        min_angle=min_angle,
+        max_angle=max_angle,
+        ml_prediction=ml_prediction,
+        imu_data=imu_data,
+        landmarks=landmarks,
+        initial_positions=initial_positions,
+        fusion_mode=fusion_mode,
+        rep_num=rep_num
+    )
 
 
 async def get_ai_feedback(exercise: str, rep_data: dict, issues: list, regional_scores: dict = None, regional_issues: dict = None) -> dict:
@@ -1901,7 +1928,7 @@ async def get_ai_feedback(exercise: str, rep_data: dict, issues: list, regional_
                 'lunges': 'Lunge',
                 'pushups': 'Push-up',
                 'lateral_shoulder_raises': 'Lateral Shoulder Raise',
-                'tricep_extensions': 'Triceps Extension',
+                'triceps_pushdown': 'Triceps Extension',
                 'dumbbell_rows': 'Dumbbell Row',
                 'dumbbell_shoulder_press': 'Shoulder Press'
             }
@@ -1967,27 +1994,6 @@ Keep it under 2 sentences. Be friendly and supportive."""
             print(f"⚠️  OpenAI feedback error: {e}, falling back to rule-based")
             # Fall through to rule-based feedback
     
-    # Fallback: Use rule-based feedback (faster, no API dependency)
-    overall_feedback = get_rule_based_overall_feedback(
-        exercise, rep_num, score, issues, regional_scores, regional_issues,
-        min_angle, max_angle, is_valid
-    )
-    
-    # Get regional feedbacks (rule-based)
-    regional_feedbacks = {}
-    if regional_scores and regional_issues:
-        for region in ['arms', 'legs', 'core', 'head']:
-            region_score = regional_scores.get(region, 100)
-            region_issues_list = regional_issues.get(region, [])
-            regional_feedbacks[region] = get_rule_based_regional_feedback(
-                exercise, region, region_score, region_issues_list,
-                rep_num, min_angle, max_angle
-            )
-    
-    return {
-        'overall': overall_feedback,
-        'regional': regional_feedbacks
-    }
 
 
 async def countdown_task(websocket: WebSocket, session_id: int):
@@ -2088,16 +2094,28 @@ async def send_ai_feedback_async(
     rep_result: dict,
     issues: list,
     regional_scores: dict = None,
-    regional_issues: dict = None
+    regional_issues: dict = None,
+    ml_prediction: dict = None,
+    imu_data: dict = None,
+    landmarks: list = None,
+    initial_positions: dict = None,
+    fusion_mode: str = 'camera_primary'
 ):
-    """Send AI feedback asynchronously without blocking rep detection."""
+    """Send AI feedback asynchronously without blocking rep detection.
+    Supports Camera-only, IMU-only, and Sensor Fusion modes.
+    """
     try:
         feedback_data = await get_ai_feedback(
             exercise,
             rep_result,
             issues,
             regional_scores,
-            regional_issues
+            regional_issues,
+            ml_prediction=ml_prediction,
+            imu_data=imu_data,
+            landmarks=landmarks,
+            initial_positions=initial_positions,
+            fusion_mode=fusion_mode
         )
         
         # Send feedback as separate message
@@ -2268,10 +2286,8 @@ async def get_session_feedback(exercise: str, reps_data: list, all_issues: list)
     exercise_names = {
         'bicep_curls': 'Biceps Curl',
         'squats': 'Squat',
-        'lunges': 'Lunge',
-        'pushups': 'Push-up',
         'lateral_shoulder_raises': 'Lateral Raise',
-        'tricep_extensions': 'Triceps Extension',
+        'triceps_pushdown': 'Triceps Extension',
         'dumbbell_rows': 'Dumbbell Row',
         'dumbbell_shoulder_press': 'Shoulder Press'
     }
@@ -2385,6 +2401,20 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
     
     # Create session
     session_id = id(websocket)
+    
+    # Initialize ML inference if enabled
+    ml_inference_instance = None
+    baselines_dict = {}
+    if ML_INFERENCE_ENABLED:
+        try:
+            ml_inference_instance = ModelInference(exercise)
+            baselines_dict = load_baselines(exercise)
+            if ml_inference_instance.has_camera_model():
+                print(f"🤖 ML Inference enabled for {exercise}")
+        except Exception as e:
+            print(f"⚠️  Failed to initialize ML inference: {e}")
+            ml_inference_instance = None
+    
     sessions[session_id] = {
         'form_analyzer': FormAnalyzer(exercise),
         'rep_counter': RepCounter(exercise),
@@ -2401,6 +2431,9 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
         'last_imu_sample_time': {},  # For 20Hz throttling per node (50ms interval per node)
         'ml_mode': 'usage',  # 'usage' (basic mode + data recording) or 'train' (ML training only)
         'training_session_started': False,  # Track if training collectors are started
+        # ML Inference (for real-time predictions)
+        'ml_inference': ml_inference_instance,
+        'baselines': baselines_dict,
         # Workout configuration
         'workout_config': {
             'numberOfSets': 3,
@@ -2762,58 +2795,8 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         # In train mode, IMU data comes from gymbud_imu_bridge WebSocket client (bypass frontend throttling)
                         # Skip frontend IMU data processing in train mode
                         if ml_mode != 'train':
-                            # Usage mode: process IMU data from frontend
-                            imu_data = data.get('imu_data') or data.get('imu')  # Support both formats
-                            imu_collector = imu_training_collectors.get(exercise)
-                            
-                            if imu_data and imu_collector and imu_collector.is_collecting:
-                                if 'current_rep_imu_samples' not in session:
-                                    session['current_rep_imu_samples'] = []
-                                if 'last_imu_sample_time' not in session:
-                                    session['last_imu_sample_time'] = None
-                                
-                                # Throttle to 20Hz: only save if 50ms (0.05s) has passed since last IMU sample
-                                last_imu_time = session.get('last_imu_sample_time')
-                                # Ensure last_imu_time is a float (not a dict from usage mode)
-                                if isinstance(last_imu_time, dict):
-                                    last_imu_time = None
-                                if last_imu_time is None or (current_time - last_imu_time) >= 0.05:
-                                    # Create IMU sample data with all available nodes (deep copy to avoid reference issues)
-                                    imu_sample_data = {}
-                                    
-                                    for node_name in ['left_wrist', 'right_wrist', 'chest']:
-                                        if node_name in imu_data and imu_data[node_name]:
-                                            imu_sample_data[node_name] = copy.deepcopy(imu_data[node_name])
-                                    
-                                    # Only save if we have at least one node's data
-                                    if imu_sample_data:
-                                        # Use timestamp from IMU data or current time
-                                        if 'timestamp' in imu_data:
-                                            imu_sample_data['timestamp'] = imu_data['timestamp']
-                                        else:
-                                            imu_sample_data['timestamp'] = current_time
-                                        
-                                        # Track rep number for this IMU sample (same as camera frame)
-                                        frame_rep_number = 0
-                                        if rep_counter.phase == 'up' and rep_counter.count >= 0:
-                                            frame_rep_number = rep_counter.count + 1
-                                        
-                                        # Add rep_number to IMU data
-                                        imu_sample_data_with_rep = copy.deepcopy(imu_sample_data)
-                                        imu_sample_data_with_rep['rep_number'] = frame_rep_number
-                                        
-                                        # Add to rep-level buffer (for rep-based collection)
-                                        session['current_rep_imu_samples'].append(copy.deepcopy(imu_sample_data))
-                                        # Also add to session-level buffer (for continuous collection) with rep_number
-                                        if 'session_imu_samples' not in session:
-                                            session['session_imu_samples'] = []
-                                        session['session_imu_samples'].append(imu_sample_data_with_rep)
-                                        
-                                        # Update last IMU sample time for throttling
-                                        session['last_imu_sample_time'] = current_time
-                                        
-                                if len(session['current_rep_imu_samples']) > 200:  # Increased for longer reps at 20Hz
-                                    session['current_rep_imu_samples'].pop(0)
+                            # Usage mode: process IMU data from frontend (not used in train mode)
+                            pass  # IMU data not used in usage mode for training collection
                     elif session.get('dataset_collection_enabled') and dataset_collector and dataset_collector.is_collecting:
                         # Usage mode: collect to regular dataset collector with 20Hz throttling
                         last_sample_time = session.get('last_camera_sample_time')
@@ -2904,12 +2887,89 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                     
                     # Add regional scores to rep_result if rep completed
                     if rep_result:
-                        rep_result['regional_scores'] = form_result.get('regional_scores', {
+                        # ML Inference: Predict regional scores using trained model
+                        ml_inference = session.get('ml_inference')
+                        ml_prediction = None
+                        baseline_similarity = None
+                        hybrid_score = None
+                        ml_regional_scores = None
+                        
+                        # Rule-based regional scores (fallback if ML not available)
+                        rule_based_regional_scores = form_result.get('regional_scores', {
                             'arms': form_result['score'],
                             'legs': form_result['score'],
                             'core': form_result['score'],
                             'head': form_result['score']
                         })
+                        
+                        if ml_inference and ml_inference.has_camera_model():
+                            try:
+                                # Get landmarks sequence for current rep
+                                rep_landmarks = session.get('current_rep_landmarks', [])
+                                if len(rep_landmarks) > 0:
+                                    # Predict using ML model (returns Dict[str, float] with regional scores)
+                                    ml_prediction = ml_inference.predict_camera(rep_landmarks)
+                                    
+                                    # Extract regional scores from ML prediction
+                                    if isinstance(ml_prediction, dict) and 'arms' in ml_prediction:
+                                        ml_regional_scores = {
+                                            'arms': ml_prediction.get('arms', 0.0),
+                                            'legs': ml_prediction.get('legs', 0.0),
+                                            'core': ml_prediction.get('core', 0.0),
+                                            'head': ml_prediction.get('head', 0.0)
+                                        }
+                                    
+                                    # Calculate baseline similarity (regional) if baselines are available
+                                    baselines = session.get('baselines', {})
+                                    if baselines and ml_regional_scores:
+                                        # Use regional scores for similarity calculation
+                                        baseline_similarity_dict, _ = calculate_baseline_similarity(
+                                            current_features=None,
+                                            baselines=baselines,
+                                            current_regional_scores=ml_regional_scores
+                                        )
+                                        baseline_similarity = baseline_similarity_dict  # Dict[str, float] with regional similarities
+                                        
+                                        # Calculate hybrid score (ML + Baseline) - regional
+                                        hybrid_score = calculate_hybrid_correction_score(
+                                            ml_prediction,
+                                            baseline_similarity,
+                                            ml_weight=0.6,
+                                            baseline_weight=0.4
+                                        )
+                                        
+                                        # Use hybrid_score as final regional scores (ML + Baseline)
+                                        if isinstance(hybrid_score, dict) and 'arms' in hybrid_score:
+                                            rep_result['regional_scores'] = hybrid_score
+                                        else:
+                                            rep_result['regional_scores'] = ml_regional_scores
+                                    elif ml_regional_scores:
+                                        # ML prediction available but no baselines - use ML prediction
+                                        rep_result['regional_scores'] = ml_regional_scores
+                                    else:
+                                        # Fallback to rule-based
+                                        rep_result['regional_scores'] = rule_based_regional_scores
+                                    
+                                    if ml_regional_scores:
+                                        print(f"🤖 ML Regional Scores: Arms={ml_regional_scores['arms']:.1f}%, Legs={ml_regional_scores['legs']:.1f}%, Core={ml_regional_scores['core']:.1f}%, Head={ml_regional_scores['head']:.1f}%")
+                                        if baseline_similarity:
+                                            print(f"   Baseline Similarity: Arms={baseline_similarity.get('arms', 0):.1f}%, Legs={baseline_similarity.get('legs', 0):.1f}%, Core={baseline_similarity.get('core', 0):.1f}%, Head={baseline_similarity.get('head', 0):.1f}%")
+                                        if hybrid_score and isinstance(hybrid_score, dict):
+                                            print(f"   Hybrid Scores: Arms={hybrid_score.get('arms', 0):.1f}%, Legs={hybrid_score.get('legs', 0):.1f}%, Core={hybrid_score.get('core', 0):.1f}%, Head={hybrid_score.get('head', 0):.1f}%")
+                            except Exception as e:
+                                print(f"⚠️  ML inference error: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                # Fallback to rule-based
+                                rep_result['regional_scores'] = rule_based_regional_scores
+                        else:
+                            # ML not available - use rule-based regional scores
+                            rep_result['regional_scores'] = rule_based_regional_scores
+                        
+                        # Add ML scores to rep_result
+                        rep_result['ml_prediction'] = ml_prediction
+                        rep_result['baseline_similarity'] = baseline_similarity
+                        rep_result['hybrid_score'] = hybrid_score
                         
                         # Save rep to dataset (both usage and train modes record data)
                         ml_mode = session.get('ml_mode', 'usage')
@@ -3177,6 +3237,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 response['rep_valid'] = rep_result.get('is_valid', True)
                                 response['rep_feedback'] = rep_result.get('feedback', '')
                                 response['workout_complete'] = True
+                                # Add ML inference scores to response
+                                response['ml_prediction'] = rep_result.get('ml_prediction')
+                                response['baseline_similarity'] = rep_result.get('baseline_similarity')
+                                response['hybrid_score'] = rep_result.get('hybrid_score')
                                 
                                 # Workout tamamlandığında otomatik kayıt yap (train mode için)
                                 ml_mode = session.get('ml_mode', 'usage')
@@ -3291,9 +3355,50 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         response['rep_completed'] = rep_result
                         response['rep_valid'] = rep_result.get('is_valid', True)
                         response['rep_feedback'] = rep_result.get('feedback', '')
+                        # Add ML inference scores to response
+                        response['ml_prediction'] = rep_result.get('ml_prediction')
+                        response['baseline_similarity'] = rep_result.get('baseline_similarity')
+                        response['hybrid_score'] = rep_result.get('hybrid_score')
                         
                         # Technical AI feedback with regional data (NON-BLOCKING)
                         # Don't await - send response immediately, feedback will come later
+                        
+                        # Determine fusion mode based on available ML models
+                        fusion_mode = 'camera_only'  # Default
+                        ml_inference = session.get('ml_inference')
+                        if ml_inference:
+                            has_camera = ml_inference.has_camera_model()
+                            has_imu = ml_inference.has_imu_model()
+                            if has_camera and has_imu:
+                                fusion_mode = 'camera_primary'  # Sensor fusion
+                            elif has_imu:
+                                fusion_mode = 'imu_only'
+                            elif has_camera:
+                                fusion_mode = 'camera_only'
+                        
+                        # Get last landmark frame (for landmark-based feedback)
+                        last_landmarks = None
+                        rep_landmarks = session.get('current_rep_landmarks', [])
+                        if len(rep_landmarks) > 0:
+                            last_landmarks = rep_landmarks[-1]
+                        
+                        # Get initial positions from form analyzer (for landmark-based feedback)
+                        initial_positions = None
+                        form_analyzer = session.get('form_analyzer')
+                        if form_analyzer and hasattr(form_analyzer, 'initial_positions'):
+                            initial_positions = form_analyzer.initial_positions
+                        
+                        # Get IMU data (last sample from current rep)
+                        imu_data_for_feedback = None
+                        if fusion_mode in ['imu_only', 'camera_primary']:
+                            rep_imu_samples = session.get('current_rep_imu_samples', [])
+                            if len(rep_imu_samples) > 0:
+                                # Get last IMU sample (remove rep_number field)
+                                last_imu_sample = rep_imu_samples[-1].copy()
+                                last_imu_sample.pop('rep_number', None)
+                                last_imu_sample.pop('timestamp', None)
+                                imu_data_for_feedback = last_imu_sample
+                        
                         asyncio.create_task(
                             send_ai_feedback_async(
                                 websocket,
@@ -3301,7 +3406,12 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 rep_result,
                                 form_result['issues'],
                                 form_result.get('regional_scores'),
-                                form_result.get('regional_issues')
+                                form_result.get('regional_issues'),
+                                ml_prediction=rep_result.get('ml_prediction'),
+                                imu_data=imu_data_for_feedback,
+                                landmarks=last_landmarks,
+                                initial_positions=initial_positions,
+                                fusion_mode=fusion_mode
                             )
                         )
                         # Don't include feedback in response - it will come as separate message
@@ -3415,16 +3525,16 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             # Store session IDs for later tracking
                             session['camera_session_id'] = camera_session_id
                             session['imu_session_id'] = imu_session_id
-                            
+                                
                             # Stop collectors (save_session already sets is_collecting=False for DatasetCollector)
                             if imu_collector:
                                 imu_collector.stop_session()
-                            
+                                
                             print(f"✅ Training session completed: {collected_count} reps + session-level continuous data saved to both datasets")
                             print(f"   Camera session ID: {camera_session_id}")
                             print(f"   IMU session ID: {imu_session_id}")
                             print(f"   Exercise: {exercise}")
-                            # Note: We don't mark as used yet - user will decide in the dialog
+                                # Note: We don't mark as used yet - user will decide in the dialog
                                 
                         except Exception as e:
                             print(f"⚠️  Failed to save training datasets: {e}")
@@ -3643,9 +3753,6 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             # Stop collectors after saving (save_session already sets is_collecting=False for DatasetCollector)
                             if imu_collector:
                                 imu_collector.stop_session()
-                        else:
-                            # Data already saved during end_session or workout completion
-                            print(f"💾 Train mode: Data already saved to MLTRAINCAMERA/ and MLTRAINIMU/")
                     
                     await websocket.send_json({
                         'type': 'training_status',
@@ -3769,8 +3876,8 @@ async def update_model(exercise: str):
             if sample.features is None:
                 camera_collector.extract_features(sample)
         
-        # Train model
-        predictor = FormScorePredictor(model_type="random_forest")
+        # Train model - MULTI-OUTPUT for regional scores
+        predictor = FormScorePredictor(model_type="random_forest", multi_output=True)
         results = predictor.train(camera_samples, verbose=False, use_imu_features=False)
         
         # Save model (overwrite existing, exercise-specific) with extended metadata
