@@ -525,8 +525,9 @@ class HybridIMURepDetector:
         Returns:
             Dict with 'pitch', 'roll', 'yaw', 'left_wrist', 'right_wrist', and optionally 'unit_vectors' or None if not available
         """
-        if self.exercise in ['bicep_curls', 'triceps_pushdown', 'dumbbell_rows']:
-            # Bicep curls - extract separate orientations for left and right wrists
+        # Extract orientation for all wrist-based exercises (bilateral movements)
+        if self.exercise in ['bicep_curls', 'triceps_pushdown', 'dumbbell_rows', 'dumbbell_shoulder_press', 'lateral_raises', 'front_raises']:
+            # Wrist-based exercises - extract separate orientations for left and right wrists
             left_wrist = imu_sample.get('left_wrist', {})
             right_wrist = imu_sample.get('right_wrist', {})
             
@@ -543,6 +544,9 @@ class HybridIMURepDetector:
                     left_pitch = float(lp)
                     left_roll = float(lr) if lr is not None else 0.0
                     left_yaw = float(ly) if ly is not None else 0.0
+                # Debug: Log if pitch is missing but other values exist
+                elif (lr is not None or ly is not None) and self.debug_enabled:
+                    print(f"⚠️  LW pitch is None but roll={lr}, yaw={ly}")
             
             # Extract right wrist orientation (use 0.0 as default if value is None)
             right_pitch = None
@@ -557,6 +561,9 @@ class HybridIMURepDetector:
                     right_pitch = float(rp)
                     right_roll = float(rr) if rr is not None else 0.0
                     right_yaw = float(ry) if ry is not None else 0.0
+                # Debug: Log if pitch is missing but other values exist
+                elif (rr is not None or ry is not None) and self.debug_enabled:
+                    print(f"⚠️  RW pitch is None but roll={rr}, yaw={ry}")
             
             # Calculate averages (for backward compatibility)
             pitches = []
