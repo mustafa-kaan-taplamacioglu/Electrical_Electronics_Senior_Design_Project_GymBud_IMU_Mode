@@ -142,17 +142,25 @@ def calculate_hybrid_correction_score(
         return {"score": float(np.clip(hybrid_score, 0, 100))}
 
 
-def load_baselines(exercise: str) -> Dict:
+def load_baselines(exercise: str, model_type: str = "camera") -> Dict:
     """
     Load baseline values for an exercise.
     
     Args:
         exercise: Exercise name (e.g., "bicep_curls")
+        model_type: "camera" or "imu" (default: "camera")
     
     Returns:
         Dict of baselines or empty dict if not found
     """
-    baseline_file = Path("models") / exercise / "form_score_camera_random_forest" / "baselines.json"
+    # Try IMU baselines first if requested
+    if model_type == "imu":
+        baseline_file = Path("models") / exercise / "form_score_imu_random_forest_multi_output" / "baselines.json"
+        if not baseline_file.exists():
+            baseline_file = Path("models") / exercise / "form_score_imu_random_forest_single_output" / "baselines.json"
+    else:
+        # Camera baselines
+        baseline_file = Path("models") / exercise / "form_score_camera_random_forest" / "baselines.json"
     
     if not baseline_file.exists():
         return {}

@@ -1,7 +1,8 @@
 import { useRef, useEffect, Suspense, useMemo, useState } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Environment, Text, Billboard } from '@react-three/drei';
+import { OrbitControls, useGLTF, Environment, Text, Billboard, Line } from '@react-three/drei';
 import * as THREE from 'three';
+import { ArrowHelper } from 'three';
 import { TextureLoader } from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { IMUNodeData, SensorFusionMode } from '../types';
@@ -176,20 +177,87 @@ function Skeleton({ landmarks }: { landmarks: Landmark[] | null }) {
   );
 }
 
-// IMU Sensor Marker - Colored sphere with label attached to bone position
+// Unit Vector Arrow - Visualizes unit vectors as 3D arrows pointing in direction
+function UnitVectorArrow({
+  origin,
+  direction,
+  color,
+  length = 0.15,
+  label
+}: {
+  origin: THREE.Vector3;
+  direction: THREE.Vector3;
+  color: string;
+  length?: number;
+  label?: string;
+}) {
+  const arrowRef = useRef<THREE.Group>(null);
+  
+  // Normalize direction and calculate end point
+  const dir = useMemo(() => direction.clone().normalize(), [direction]);
+  const end = useMemo(() => origin.clone().add(dir.clone().multiplyScalar(length)), [origin, dir, length]);
+  
+  // Calculate rotation to point arrow in direction
+  // Default cylinder points along Y-axis, so we need to rotate from Y to our direction
+  const quaternion = useMemo(() => {
+    const up = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion();
+    quat.setFromUnitVectors(up, dir);
+    return quat;
+  }, [dir]);
+  
+  // Mid-point for shaft positioning
+  const midPoint = useMemo(() => origin.clone().add(dir.clone().multiplyScalar(length * 0.4)), [origin, dir, length]);
+  
+  return (
+    <group ref={arrowRef}>
+      {/* Arrow shaft (cylinder) - rotated to point in direction */}
+      <mesh position={midPoint} quaternion={quaternion}>
+        <cylinderGeometry args={[0.004, 0.004, length * 0.8, 8]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} />
+      </mesh>
+      {/* Arrow head (cone) - rotated to point in direction */}
+      <mesh position={end} quaternion={quaternion}>
+        <coneGeometry args={[0.012, length * 0.25, 8]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+      </mesh>
+      {label && (
+        <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
+          <Text
+            position={[end.x, end.y + 0.025, end.z]}
+            fontSize={0.025}
+            color={color}
+            anchorX="center"
+            anchorY="bottom"
+          >
+            {label}
+          </Text>
+        </Billboard>
+      )}
+    </group>
+  );
+}
+
+// IMU Sensor Marker - Colored sphere with label, unit vectors, and trajectory
 function IMUSensorMarker({ 
   position, 
   label, 
   color = '#ff3333',
-  isActive = false 
+  isActive = false,
+  unitVectors,
+  trajectory
 }: { 
   position: [number, number, number]; 
   label: string; 
   color?: string;
   isActive?: boolean;
+  unitVectors?: { normal: [number, number, number]; tangent: [number, number, number]; binormal: [number, number, number] };
+  trajectory?: THREE.Vector3[];
 }) {
   const markerRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
+  // Origin at local (0,0,0) since parent group handles world position
+  const originVec = useMemo(() => new THREE.Vector3(0, 0, 0), []);
   
   // Pulse animation when active
   useFrame((state) => {
@@ -221,6 +289,48 @@ function IMUSensorMarker({
         <ringGeometry args={[0.05, 0.065, 32]} />
         <meshBasicMaterial color={color} side={THREE.DoubleSide} transparent opacity={0.7} />
       </mesh>
+      
+      {/* Unit Vectors Visualization */}
+      {unitVectors && isActive && (
+        <group>
+          {/* Normal vector (blue) - up direction */}
+          <UnitVectorArrow
+            origin={originVec}
+            direction={new THREE.Vector3(...unitVectors.normal)}
+            color="#00ffff"
+            length={0.12}
+            label="N"
+          />
+          {/* Tangent vector (green) - forward direction */}
+          <UnitVectorArrow
+            origin={originVec}
+            direction={new THREE.Vector3(...unitVectors.tangent)}
+            color="#00ff00"
+            length={0.10}
+            label="T"
+          />
+          {/* Binormal vector (red) - side direction */}
+          <UnitVectorArrow
+            origin={originVec}
+            direction={new THREE.Vector3(...unitVectors.binormal)}
+            color="#ff0080"
+            length={0.10}
+            label="B"
+          />
+        </group>
+      )}
+      
+      {/* Trajectory Line (last 50 points) - using drei Line for proper rendering */}
+      {trajectory && trajectory.length > 1 && (
+        <Line
+          points={trajectory.map(v => [v.x, v.y, v.z] as [number, number, number])}
+          color={color}
+          lineWidth={2}
+          transparent
+          opacity={0.6}
+        />
+      )}
+      
       {/* Label */}
       <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
         <Text
@@ -239,34 +349,124 @@ function IMUSensorMarker({
   );
 }
 
-// IMU Sensor Markers Component - Attaches to avatar bones
+// Helper to convert IMU unit_vectors format {x,y,z} to [x,y,z] tuple
+function convertUnitVectors(uv: any): { normal: [number, number, number]; tangent: [number, number, number]; binormal: [number, number, number] } | undefined {
+  if (!uv) return undefined;
+  return {
+    normal: [uv.normal?.x ?? 0, uv.normal?.y ?? 0, uv.normal?.z ?? 1],
+    tangent: [uv.tangent?.x ?? 0, uv.tangent?.y ?? 1, uv.tangent?.z ?? 0],
+    binormal: [uv.binormal?.x ?? 1, uv.binormal?.y ?? 0, uv.binormal?.z ?? 0]
+  };
+}
+
+// IMU Sensor Markers Component - Attaches to avatar bones OR uses IMU data directly
 function IMUSensorMarkers({ 
   bonesRef, 
   imuData,
-  show = true 
+  show = true,
+  fusionMode = 'camera_primary'
 }: { 
   bonesRef: React.RefObject<{ [key: string]: THREE.Bone }>;
   imuData?: { leftWrist?: any; rightWrist?: any; chest?: any } | null;
   show?: boolean;
+  fusionMode?: SensorFusionMode;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const initializedRef = useRef(false);
+  const frameCountRef = useRef(0);
   
   // Default positions (T-pose avatar approximate positions)
   const [lwPos, setLwPos] = useState<[number, number, number]>([-0.55, 0.95, 0.1]);
   const [rwPos, setRwPos] = useState<[number, number, number]>([0.55, 0.95, 0.1]);
   const [chPos, setChPos] = useState<[number, number, number]>([0, 1.25, 0.15]);
   
+  // Trajectory tracking with state (for re-renders)
+  const [lwTrajectory, setLwTrajectory] = useState<THREE.Vector3[]>([]);
+  const [rwTrajectory, setRwTrajectory] = useState<THREE.Vector3[]>([]);
+  const [chTrajectory, setChTrajectory] = useState<THREE.Vector3[]>([]);
+  const MAX_TRAJECTORY_POINTS = 50;
+  
+  // For IMU-only mode: track position based on acceleration/orientation
+  const lwBasePos = useRef(new THREE.Vector3(-0.35, 1.0, 0.3));
+  const rwBasePos = useRef(new THREE.Vector3(0.35, 1.0, 0.3));
+  const chBasePos = useRef(new THREE.Vector3(0, 1.25, 0.15));
+  
   useFrame(() => {
     if (!show) return;
+    frameCountRef.current++;
     
+    // For IMU-only mode: Position markers based on IMU orientation
+    if (fusionMode === 'imu_only' && imuData) {
+      // Update LW position based on left wrist IMU orientation
+      if (imuData.leftWrist) {
+        const euler = imuData.leftWrist.euler;
+        // Use pitch to move Y (arm up/down), roll for X offset
+        const pitchRad = THREE.MathUtils.degToRad(euler.pitch);
+        const rollRad = THREE.MathUtils.degToRad(euler.roll);
+        
+        const newX = lwBasePos.current.x + Math.sin(rollRad) * 0.3;
+        const newY = lwBasePos.current.y + Math.sin(pitchRad) * 0.4;
+        const newZ = lwBasePos.current.z + Math.cos(pitchRad) * 0.1;
+        
+        const newPos: [number, number, number] = [newX, newY, newZ];
+        setLwPos(newPos);
+        
+        // Update trajectory
+        if (frameCountRef.current % 2 === 0) { // Every 2nd frame for performance
+          const posVec = new THREE.Vector3(newX, newY, newZ);
+          setLwTrajectory(prev => {
+            const updated = [...prev, posVec];
+            return updated.length > MAX_TRAJECTORY_POINTS ? updated.slice(-MAX_TRAJECTORY_POINTS) : updated;
+          });
+        }
+      }
+      
+      // Update RW position based on right wrist IMU orientation
+      if (imuData.rightWrist) {
+        const euler = imuData.rightWrist.euler;
+        const pitchRad = THREE.MathUtils.degToRad(euler.pitch);
+        const rollRad = THREE.MathUtils.degToRad(euler.roll);
+        
+        const newX = rwBasePos.current.x - Math.sin(rollRad) * 0.3; // Inverted for right side
+        const newY = rwBasePos.current.y + Math.sin(pitchRad) * 0.4;
+        const newZ = rwBasePos.current.z + Math.cos(pitchRad) * 0.1;
+        
+        const newPos: [number, number, number] = [newX, newY, newZ];
+        setRwPos(newPos);
+        
+        // Update trajectory
+        if (frameCountRef.current % 2 === 0) {
+          const posVec = new THREE.Vector3(newX, newY, newZ);
+          setRwTrajectory(prev => {
+            const updated = [...prev, posVec];
+            return updated.length > MAX_TRAJECTORY_POINTS ? updated.slice(-MAX_TRAJECTORY_POINTS) : updated;
+          });
+        }
+      }
+      
+      // Chest position (relatively static, slight movement from chest IMU if available)
+      if (imuData.chest) {
+        const euler = imuData.chest.euler;
+        const pitchRad = THREE.MathUtils.degToRad(euler.pitch * 0.3);
+        const rollRad = THREE.MathUtils.degToRad(euler.roll * 0.3);
+        
+        const newPos: [number, number, number] = [
+          chBasePos.current.x + Math.sin(rollRad) * 0.1,
+          chBasePos.current.y,
+          chBasePos.current.z + Math.sin(pitchRad) * 0.1
+        ];
+        setChPos(newPos);
+      }
+      
+      return; // Skip bone-based positioning for IMU-only mode
+    }
+    
+    // For camera modes: Get position from avatar bones
     const bones = bonesRef.current;
     if (!bones || Object.keys(bones).length === 0) {
-      // Use default positions if no bones available
       return;
     }
     
-    // Try to get Left Wrist position
+    // Try to get Left Wrist position from bones
     const lwBones = ['LeftHand', 'LeftForeArm', 'LeftArm'];
     for (const name of lwBones) {
       if (bones[name]) {
@@ -274,13 +474,21 @@ function IMUSensorMarkers({
         bones[name].getWorldPosition(pos);
         if (name === 'LeftForeArm') pos.x -= 0.08;
         if (name === 'LeftArm') pos.x -= 0.2;
-        pos.z += 0.05; // Forward offset
+        pos.z += 0.05;
         setLwPos([pos.x, pos.y, pos.z]);
+        
+        // Update trajectory
+        if (frameCountRef.current % 3 === 0) {
+          setLwTrajectory(prev => {
+            const updated = [...prev, pos.clone()];
+            return updated.length > MAX_TRAJECTORY_POINTS ? updated.slice(-MAX_TRAJECTORY_POINTS) : updated;
+          });
+        }
         break;
       }
     }
     
-    // Try to get Right Wrist position
+    // Try to get Right Wrist position from bones
     const rwBones = ['RightHand', 'RightForeArm', 'RightArm'];
     for (const name of rwBones) {
       if (bones[name]) {
@@ -288,53 +496,81 @@ function IMUSensorMarkers({
         bones[name].getWorldPosition(pos);
         if (name === 'RightForeArm') pos.x += 0.08;
         if (name === 'RightArm') pos.x += 0.2;
-        pos.z += 0.05; // Forward offset
+        pos.z += 0.05;
         setRwPos([pos.x, pos.y, pos.z]);
+        
+        // Update trajectory
+        if (frameCountRef.current % 3 === 0) {
+          setRwTrajectory(prev => {
+            const updated = [...prev, pos.clone()];
+            return updated.length > MAX_TRAJECTORY_POINTS ? updated.slice(-MAX_TRAJECTORY_POINTS) : updated;
+          });
+        }
         break;
       }
     }
     
-    // Try to get Chest position (center of chest/upper spine)
+    // Try to get Chest position from bones
     const chBones = ['Spine2', 'Spine1', 'Spine', 'Chest'];
     for (const name of chBones) {
       if (bones[name]) {
         const pos = new THREE.Vector3();
         bones[name].getWorldPosition(pos);
-        pos.z += 0.1; // Forward offset
+        pos.z += 0.1;
         setChPos([pos.x, pos.y, pos.z]);
+        
+        // Update trajectory
+        if (frameCountRef.current % 3 === 0) {
+          setChTrajectory(prev => {
+            const updated = [...prev, pos.clone()];
+            return updated.length > MAX_TRAJECTORY_POINTS ? updated.slice(-MAX_TRAJECTORY_POINTS) : updated;
+          });
+        }
         break;
       }
     }
-    
-    initializedRef.current = true;
   });
   
   if (!show) return null;
   
+  // Convert unit_vectors from IMU data format to array format for rendering
+  const lwUnitVectors = convertUnitVectors(imuData?.leftWrist?.unit_vectors);
+  const rwUnitVectors = convertUnitVectors(imuData?.rightWrist?.unit_vectors);
+  const chUnitVectors = convertUnitVectors(imuData?.chest?.unit_vectors);
+  
   return (
     <group ref={groupRef}>
+      {/* Left Wrist Marker */}
       <group position={lwPos}>
         <IMUSensorMarker 
           position={[0, 0, 0]} 
           label="LW" 
           color="#3b82f6"
           isActive={!!imuData?.leftWrist}
+          unitVectors={lwUnitVectors}
+          trajectory={lwTrajectory}
         />
       </group>
+      {/* Right Wrist Marker */}
       <group position={rwPos}>
         <IMUSensorMarker 
           position={[0, 0, 0]} 
           label="RW" 
           color="#a855f7"
           isActive={!!imuData?.rightWrist}
+          unitVectors={rwUnitVectors}
+          trajectory={rwTrajectory}
         />
       </group>
+      {/* Chest Marker */}
       <group position={chPos}>
         <IMUSensorMarker 
           position={[0, 0, 0]} 
           label="CH" 
           color="#f59e0b"
           isActive={!!imuData?.chest}
+          unitVectors={chUnitVectors}
+          trajectory={chTrajectory}
         />
       </group>
     </group>
@@ -859,12 +1095,25 @@ function RPMAvatar({
 
   return (
     <group ref={groupRef} position={[0, 0, 0]}>
+      {/* 3D Cartesian Coordinate System - Only show in IMU-only mode */}
+      {fusionMode === 'imu_only' && (
+        <group>
+          {/* Coordinate axes (X=red, Y=green, Z=blue) */}
+          <axesHelper args={[1.0]} />
+          {/* Larger grid for better visualization */}
+          <gridHelper args={[3, 30, '#4a4a5a', '#3a3a4a']} position={[0, 0, 0]} />
+          {/* Additional grid lines for depth perception */}
+          <gridHelper args={[3, 30, '#4a4a5a', '#3a3a4a']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0]} />
+          <gridHelper args={[3, 30, '#4a4a5a', '#3a3a4a']} rotation={[0, 0, Math.PI / 2]} position={[0, 0, 0]} />
+        </group>
+      )}
       <primitive object={clonedModel} />
-      {/* IMU Sensor Markers */}
+      {/* IMU Sensor Markers with Unit Vectors and Trajectories */}
       <IMUSensorMarkers 
         bonesRef={bonesRef} 
         imuData={imuData}
         show={fusionMode !== 'camera_only' && !!imuData}
+        fusionMode={fusionMode}
       />
     </group>
   );
@@ -1055,13 +1304,34 @@ export const HumanAvatar = ({
             🎛️ IMU Sensors ({fusionMode})
           </div>
           {imuData.leftWrist && (
-            <div>LW: R:{imuData.leftWrist.euler.roll.toFixed(0)}° P:{imuData.leftWrist.euler.pitch.toFixed(0)}° Y:{imuData.leftWrist.euler.yaw.toFixed(0)}°</div>
+            <div>
+              LW: R:{imuData.leftWrist.euler.roll.toFixed(0)}° P:{imuData.leftWrist.euler.pitch.toFixed(0)}° Y:{imuData.leftWrist.euler.yaw.toFixed(0)}°
+              {imuData.leftWrist.unit_vectors && (
+                <span style={{ marginLeft: '8px', fontSize: '9px', color: '#888' }}>
+                  N:({imuData.leftWrist.unit_vectors.normal.x.toFixed(2)},{imuData.leftWrist.unit_vectors.normal.y.toFixed(2)},{imuData.leftWrist.unit_vectors.normal.z.toFixed(2)})
+                </span>
+              )}
+            </div>
           )}
           {imuData.rightWrist && (
-            <div>RW: R:{imuData.rightWrist.euler.roll.toFixed(0)}° P:{imuData.rightWrist.euler.pitch.toFixed(0)}° Y:{imuData.rightWrist.euler.yaw.toFixed(0)}°</div>
+            <div>
+              RW: R:{imuData.rightWrist.euler.roll.toFixed(0)}° P:{imuData.rightWrist.euler.pitch.toFixed(0)}° Y:{imuData.rightWrist.euler.yaw.toFixed(0)}°
+              {imuData.rightWrist.unit_vectors && (
+                <span style={{ marginLeft: '8px', fontSize: '9px', color: '#888' }}>
+                  N:({imuData.rightWrist.unit_vectors.normal.x.toFixed(2)},{imuData.rightWrist.unit_vectors.normal.y.toFixed(2)},{imuData.rightWrist.unit_vectors.normal.z.toFixed(2)})
+                </span>
+              )}
+            </div>
           )}
           {imuData.chest && (
-            <div>CH: R:{imuData.chest.euler.roll.toFixed(0)}° P:{imuData.chest.euler.pitch.toFixed(0)}° Y:{imuData.chest.euler.yaw.toFixed(0)}°</div>
+            <div>
+              CH: R:{imuData.chest.euler.roll.toFixed(0)}° P:{imuData.chest.euler.pitch.toFixed(0)}° Y:{imuData.chest.euler.yaw.toFixed(0)}°
+              {imuData.chest.unit_vectors && (
+                <span style={{ marginLeft: '8px', fontSize: '9px', color: '#888' }}>
+                  N:({imuData.chest.unit_vectors.normal.x.toFixed(2)},{imuData.chest.unit_vectors.normal.y.toFixed(2)},{imuData.chest.unit_vectors.normal.z.toFixed(2)})
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}

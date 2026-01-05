@@ -191,9 +191,26 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
     getCameras();
   }, []);
 
-  // Start camera with selected device
+  // Start camera with selected device (or skip camera for IMU-only mode)
   const startCamera = async () => {
-    if (!selectedCamera || cameraStarted) return;
+    if (cameraStarted) return;
+    
+    // IMU-only mode: Skip camera, connect to IMU and backend directly
+    if (fusionMode === 'imu_only') {
+      addLog('IMU-only mode: Skipping camera, connecting to backend...');
+      setState('connecting');
+      setCameraStarted(true);  // Set to true to trigger WebSocket connection
+      
+      // Connect to IMU if not connected
+      if (!imuConnected && !imuConnecting) {
+        addLog('Connecting to IMU sensors...');
+        connectIMU();
+      }
+      return;  // Skip camera initialization
+    }
+    
+    // Camera modes: Require camera selection
+    if (!selectedCamera) return;
     
     addLog(`Starting camera...`);
     setState('connecting');
@@ -258,26 +275,51 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
   useEffect(() => {
     if (!cameraStarted) return;
     
+    // Prevent multiple connections
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+      console.log('⚠️ WebSocket already connecting/connected, skipping...');
+      return;
+    }
+    
+    // Close existing connection if any
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch (e) {
+        console.error('Error closing existing WebSocket:', e);
+      }
+      wsRef.current = null;
+    }
+    
+    console.log('🔌 Opening new WebSocket connection...');
     const ws = new WebSocket(`ws://localhost:8000/ws/${exercise}`);
     
     ws.onopen = () => {
+      console.log('✅ Backend WebSocket connected');
       addLog('Backend WebSocket connected');
-      ws.send(JSON.stringify({ 
+      const initMessage: any = { 
         type: 'init', 
         api_key: apiKey,
         ml_mode: mlMode,
+        fusion_mode: fusionMode,  // Send user-selected fusion mode
         workout_config: {
           numberOfSets: numberOfSets,
           repsPerSet: repsPerSet,
           restTimeSeconds: restTimeSeconds
         }
-      }));
+      };
       
-      // Dataset collection is automatic in both usage and train modes
-      if (mlMode === 'usage' || mlMode === 'train') {
-        ws.send(JSON.stringify({ type: 'start_collection' }));
-        setDatasetCollectionStatus('collecting');
-        setDatasetCollectionEnabled(true); // Set state for UI display
+      try {
+        ws.send(JSON.stringify(initMessage));
+        
+        // Dataset collection is automatic in both usage and train modes
+        if (mlMode === 'usage' || mlMode === 'train') {
+          ws.send(JSON.stringify({ type: 'start_collection' }));
+          setDatasetCollectionStatus('collecting');
+          setDatasetCollectionEnabled(true); // Set state for UI display
+        }
+      } catch (e) {
+        console.error('Error sending init message:', e);
       }
     };
     
@@ -440,23 +482,40 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
     
     ws.onerror = (error) => {
       addLog(`WS ERROR: ${error}`);
+      console.error('WebSocket error:', error);
     };
     
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       addLog('WebSocket closed');
+      console.log('WebSocket closed:', event.code, event.reason);
+      // Don't try to reconnect automatically - let user restart if needed
     };
     
     wsRef.current = ws;
     
     return () => {
-      // Stop dataset collection on cleanup
-      // Stop collection if it was active
-      if ((mlMode === 'usage' || mlMode === 'train') && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'stop_collection' }));
+      // Cleanup: Close WebSocket connection
+      if (wsRef.current) {
+        console.log('🧹 Cleaning up WebSocket connection...');
+        try {
+          // Stop dataset collection on cleanup
+          if ((mlMode === 'usage' || mlMode === 'train') && wsRef.current.readyState === WebSocket.OPEN) {
+            try {
+              wsRef.current.send(JSON.stringify({ type: 'stop_collection' }));
+            } catch (e) {
+              console.error('Error sending stop_collection:', e);
+            }
+          }
+          if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+            wsRef.current.close();
+          }
+        } catch (e) {
+          console.error('Error closing WebSocket:', e);
+        }
+        wsRef.current = null;
       }
-      ws.close();
     };
-  }, [exercise, apiKey, cameraStarted, datasetCollectionEnabled]);
+  }, [exercise, apiKey, cameraStarted, mlMode, fusionMode, numberOfSets, repsPerSet, restTimeSeconds]);
   
   // Toggle dataset collection
   const toggleDatasetCollection = () => {
@@ -1017,7 +1076,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             </div>
             
             {/* Rest Time Between Sets */}
-            <div style={{ marginBottom: '10px' }}>
+            <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', color: '#ccc' }}>
                 Rest Time Between Sets (seconds):
               </label>
@@ -1038,6 +1097,15 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                 }}
               />
             </div>
+            
+            {/* Dumbbell rows instruction (only right side) */}
+            {exercise === 'dumbbell_rows' && (
+              <div style={{ marginBottom: '15px', padding: '12px', borderRadius: '6px', background: '#1e3a8a20', border: '1px solid #3b82f6' }}>
+                <p style={{ fontSize: '14px', color: '#3b82f6', margin: 0, textAlign: 'center' }}>
+                  📹 Kameranın karşısına <strong>sağ yanınızı</strong> dönün (90° açıdan, vücudun sağ tarafı görünecek)
+                </p>
+              </div>
+            )}
           </div>
           
           <div className="button-group" style={{ marginTop: '20px' }}>
@@ -1047,7 +1115,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             <button 
               className="start-button"
               onClick={startCamera}
-              disabled={!selectedCamera}
+              disabled={fusionMode !== 'imu_only' && !selectedCamera}
             >
               Start →
             </button>
@@ -1698,33 +1766,123 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
               <span style={{ color: '#22c55e', fontWeight: 'bold' }}>📊 IMU Activity Monitor</span>
               <span style={{ color: '#888' }}>{imuSampleRate.toFixed(0)} Hz</span>
             </div>
-            <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
               {/* Left Wrist */}
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ color: '#3b82f6', marginBottom: '4px' }}>🤚 Left Wrist</div>
-                <div style={{ color: leftWrist ? '#fff' : '#666' }}>
-                  R: {leftWrist ? leftWrist.euler.roll.toFixed(0) : '--'}°
+              <div style={{ flex: 1, textAlign: 'center', minWidth: '200px' }}>
+                <div style={{ color: '#3b82f6', marginBottom: '8px', fontWeight: 'bold' }}>🤚 Left Wrist (LW)</div>
+                
+                {/* Orientation (Euler) */}
+                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Orientation:</div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Roll: {leftWrist ? leftWrist.euler.roll.toFixed(1) : '--'}°
+                  </div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Pitch: {leftWrist ? leftWrist.euler.pitch.toFixed(1) : '--'}°
+                  </div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Yaw: {leftWrist ? leftWrist.euler.yaw.toFixed(1) : '--'}°
+                  </div>
                 </div>
-                <div style={{ color: leftWrist ? '#fff' : '#666' }}>
-                  P: {leftWrist ? leftWrist.euler.pitch.toFixed(0) : '--'}°
+                
+                {/* Accelerometer (XYZ) */}
+                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Accel (g):</div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    X: {leftWrist ? leftWrist.accel.x.toFixed(2) : '--'}
+                  </div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Y: {leftWrist ? leftWrist.accel.y.toFixed(2) : '--'}
+                  </div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Z: {leftWrist ? leftWrist.accel.z.toFixed(2) : '--'}
+                  </div>
                 </div>
-                <div style={{ color: leftWrist ? '#fff' : '#666' }}>
-                  Y: {leftWrist ? leftWrist.euler.yaw.toFixed(0) : '--'}°
+                
+                {/* Gyroscope (XYZ) */}
+                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(249, 115, 22, 0.1)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Gyro (deg/s):</div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    X: {leftWrist ? leftWrist.gyro.x.toFixed(1) : '--'}
+                  </div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Y: {leftWrist ? leftWrist.gyro.y.toFixed(1) : '--'}
+                  </div>
+                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Z: {leftWrist ? leftWrist.gyro.z.toFixed(1) : '--'}
+                  </div>
                 </div>
+                
+                {/* Unit Vectors */}
+                {leftWrist?.unit_vectors && (
+                  <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Unit Vectors:</div>
+                    <div style={{ color: '#fff', fontSize: '9px' }}>
+                      <div>Normal: ({leftWrist.unit_vectors.normal.x.toFixed(2)}, {leftWrist.unit_vectors.normal.y.toFixed(2)}, {leftWrist.unit_vectors.normal.z.toFixed(2)})</div>
+                      <div>Tangent: ({leftWrist.unit_vectors.tangent.x.toFixed(2)}, {leftWrist.unit_vectors.tangent.y.toFixed(2)}, {leftWrist.unit_vectors.tangent.z.toFixed(2)})</div>
+                      <div>Binormal: ({leftWrist.unit_vectors.binormal.x.toFixed(2)}, {leftWrist.unit_vectors.binormal.y.toFixed(2)}, {leftWrist.unit_vectors.binormal.z.toFixed(2)})</div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Right Wrist */}
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ color: '#a855f7', marginBottom: '4px' }}>✋ Right Wrist</div>
-                <div style={{ color: rightWrist ? '#fff' : '#666' }}>
-                  R: {rightWrist ? rightWrist.euler.roll.toFixed(0) : '--'}°
+              <div style={{ flex: 1, textAlign: 'center', minWidth: '200px' }}>
+                <div style={{ color: '#a855f7', marginBottom: '8px', fontWeight: 'bold' }}>✋ Right Wrist (RW)</div>
+                
+                {/* Orientation (Euler) */}
+                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Orientation:</div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Roll: {rightWrist ? rightWrist.euler.roll.toFixed(1) : '--'}°
+                  </div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Pitch: {rightWrist ? rightWrist.euler.pitch.toFixed(1) : '--'}°
+                  </div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Yaw: {rightWrist ? rightWrist.euler.yaw.toFixed(1) : '--'}°
+                  </div>
                 </div>
-                <div style={{ color: rightWrist ? '#fff' : '#666' }}>
-                  P: {rightWrist ? rightWrist.euler.pitch.toFixed(0) : '--'}°
+                
+                {/* Accelerometer (XYZ) */}
+                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Accel (g):</div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    X: {rightWrist ? rightWrist.accel.x.toFixed(2) : '--'}
+                  </div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Y: {rightWrist ? rightWrist.accel.y.toFixed(2) : '--'}
+                  </div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Z: {rightWrist ? rightWrist.accel.z.toFixed(2) : '--'}
+                  </div>
                 </div>
-                <div style={{ color: rightWrist ? '#fff' : '#666' }}>
-                  Y: {rightWrist ? rightWrist.euler.yaw.toFixed(0) : '--'}°
+                
+                {/* Gyroscope (XYZ) */}
+                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(249, 115, 22, 0.1)', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Gyro (deg/s):</div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    X: {rightWrist ? rightWrist.gyro.x.toFixed(1) : '--'}
+                  </div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Y: {rightWrist ? rightWrist.gyro.y.toFixed(1) : '--'}
+                  </div>
+                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                    Z: {rightWrist ? rightWrist.gyro.z.toFixed(1) : '--'}
+                  </div>
                 </div>
+                
+                {/* Unit Vectors */}
+                {rightWrist?.unit_vectors && (
+                  <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Unit Vectors:</div>
+                    <div style={{ color: '#fff', fontSize: '9px' }}>
+                      <div>Normal: ({rightWrist.unit_vectors.normal.x.toFixed(2)}, {rightWrist.unit_vectors.normal.y.toFixed(2)}, {rightWrist.unit_vectors.normal.z.toFixed(2)})</div>
+                      <div>Tangent: ({rightWrist.unit_vectors.tangent.x.toFixed(2)}, {rightWrist.unit_vectors.tangent.y.toFixed(2)}, {rightWrist.unit_vectors.tangent.z.toFixed(2)})</div>
+                      <div>Binormal: ({rightWrist.unit_vectors.binormal.x.toFixed(2)}, {rightWrist.unit_vectors.binormal.y.toFixed(2)}, {rightWrist.unit_vectors.binormal.z.toFixed(2)})</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1752,7 +1910,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
           </div>
           <div className="stat-item">
             <span className="stat-value">{currentAngle.toFixed(0)}°</span>
-            <span className="stat-label">{phase.toUpperCase()}</span>
+            <span className="stat-label">{(phase || 'down').toUpperCase()}</span>
           </div>
         </div>
 

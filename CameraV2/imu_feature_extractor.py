@@ -5,6 +5,17 @@ Extracts features from IMU sensor data sequences
 
 import numpy as np
 from typing import Dict, List, Optional
+import sys
+from pathlib import Path
+
+# Add utils directory to path for quaternion_vectors import
+sys.path.append(str(Path(__file__).parent.parent))
+try:
+    from utils.quaternion_vectors import extract_orientation_vectors, calculate_orientation_features
+    QUATERNION_VECTORS_AVAILABLE = True
+except ImportError:
+    QUATERNION_VECTORS_AVAILABLE = False
+    print("⚠️  quaternion_vectors module not available - unit vectors features will be skipped")
 
 
 def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
@@ -259,6 +270,81 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
             features['wrist_symmetry_mean'] = float(np.mean(symmetry_diff))
             features['wrist_symmetry_max'] = float(np.max(symmetry_diff))
     
+    # ORIENTATION UNIT VECTORS FEATURES (Normal, Tangent, Binormal)
+    # These represent the sensor's orientation in 3D space more robustly than Euler angles
+    if QUATERNION_VECTORS_AVAILABLE:
+        # Extract unit vectors for each sample and compute statistics
+        left_wrist_normal_x = []
+        left_wrist_normal_y = []
+        left_wrist_normal_z = []
+        left_wrist_tangent_x = []
+        left_wrist_tangent_y = []
+        left_wrist_tangent_z = []
+        left_wrist_binormal_x = []
+        left_wrist_binormal_y = []
+        left_wrist_binormal_z = []
+        
+        right_wrist_normal_x = []
+        right_wrist_normal_y = []
+        right_wrist_normal_z = []
+        right_wrist_tangent_x = []
+        right_wrist_tangent_y = []
+        right_wrist_tangent_z = []
+        right_wrist_binormal_x = []
+        right_wrist_binormal_y = []
+        right_wrist_binormal_z = []
+        
+        for sample in imu_sequence:
+            # Left wrist unit vectors
+            lw_vectors = extract_orientation_vectors(sample, 'left_wrist')
+            if lw_vectors:
+                left_wrist_normal_x.append(lw_vectors['normal'][0])
+                left_wrist_normal_y.append(lw_vectors['normal'][1])
+                left_wrist_normal_z.append(lw_vectors['normal'][2])
+                left_wrist_tangent_x.append(lw_vectors['tangent'][0])
+                left_wrist_tangent_y.append(lw_vectors['tangent'][1])
+                left_wrist_tangent_z.append(lw_vectors['tangent'][2])
+                left_wrist_binormal_x.append(lw_vectors['binormal'][0])
+                left_wrist_binormal_y.append(lw_vectors['binormal'][1])
+                left_wrist_binormal_z.append(lw_vectors['binormal'][2])
+            
+            # Right wrist unit vectors
+            rw_vectors = extract_orientation_vectors(sample, 'right_wrist')
+            if rw_vectors:
+                right_wrist_normal_x.append(rw_vectors['normal'][0])
+                right_wrist_normal_y.append(rw_vectors['normal'][1])
+                right_wrist_normal_z.append(rw_vectors['normal'][2])
+                right_wrist_tangent_x.append(rw_vectors['tangent'][0])
+                right_wrist_tangent_y.append(rw_vectors['tangent'][1])
+                right_wrist_tangent_z.append(rw_vectors['tangent'][2])
+                right_wrist_binormal_x.append(rw_vectors['binormal'][0])
+                right_wrist_binormal_y.append(rw_vectors['binormal'][1])
+                right_wrist_binormal_z.append(rw_vectors['binormal'][2])
+        
+        # Compute statistics for left wrist unit vectors
+        if left_wrist_normal_x:
+            features.update(compute_stats(left_wrist_normal_x, 'lw_normal_x'))
+            features.update(compute_stats(left_wrist_normal_y, 'lw_normal_y'))
+            features.update(compute_stats(left_wrist_normal_z, 'lw_normal_z'))
+            features.update(compute_stats(left_wrist_tangent_x, 'lw_tangent_x'))
+            features.update(compute_stats(left_wrist_tangent_y, 'lw_tangent_y'))
+            features.update(compute_stats(left_wrist_tangent_z, 'lw_tangent_z'))
+            features.update(compute_stats(left_wrist_binormal_x, 'lw_binormal_x'))
+            features.update(compute_stats(left_wrist_binormal_y, 'lw_binormal_y'))
+            features.update(compute_stats(left_wrist_binormal_z, 'lw_binormal_z'))
+        
+        # Compute statistics for right wrist unit vectors
+        if right_wrist_normal_x:
+            features.update(compute_stats(right_wrist_normal_x, 'rw_normal_x'))
+            features.update(compute_stats(right_wrist_normal_y, 'rw_normal_y'))
+            features.update(compute_stats(right_wrist_normal_z, 'rw_normal_z'))
+            features.update(compute_stats(right_wrist_tangent_x, 'rw_tangent_x'))
+            features.update(compute_stats(right_wrist_tangent_y, 'rw_tangent_y'))
+            features.update(compute_stats(right_wrist_tangent_z, 'rw_tangent_z'))
+            features.update(compute_stats(right_wrist_binormal_x, 'rw_binormal_x'))
+            features.update(compute_stats(right_wrist_binormal_y, 'rw_binormal_y'))
+            features.update(compute_stats(right_wrist_binormal_z, 'rw_binormal_z'))
+    
     # Chest (optional)
     if chest_roll:
         features.update(compute_stats(chest_roll, 'ch_roll'))
@@ -283,6 +369,51 @@ def extract_imu_features(imu_sequence: List[Dict]) -> Dict[str, float]:
     features['sequence_length'] = float(len(imu_sequence))
     features['has_left_wrist'] = float(len(left_wrist_roll) > 0)
     features['has_right_wrist'] = float(len(right_wrist_roll) > 0)
+    
+    # Rep duration (temporal feature - important for speed detection)
+    timestamps = [s.get('timestamp', 0) for s in imu_sequence if 'timestamp' in s]
+    if len(timestamps) >= 2:
+        rep_duration = timestamps[-1] - timestamps[0]  # Seconds
+        features['rep_duration'] = float(rep_duration)
+        # Sample rate (Hz) - useful for normalization
+        if rep_duration > 0:
+            features['avg_sample_rate'] = float(len(timestamps) / rep_duration)
+    else:
+        features['rep_duration'] = 0.0
+        features['avg_sample_rate'] = 0.0
+    
+    # Gyroscope magnitude features (for speed detection)
+    # Calculate gyro magnitude for each sample and compute statistics
+    gyro_magnitudes = []
+    for sample in imu_sequence:
+        mags = []
+        for node_name in ['left_wrist', 'right_wrist', 'chest']:
+            node_data = sample.get(node_name, {})
+            if node_data and isinstance(node_data, dict):
+                gx = node_data.get('gx', 0) or 0
+                gy = node_data.get('gy', 0) or 0
+                gz = node_data.get('gz', 0) or 0
+                mag = np.sqrt(gx**2 + gy**2 + gz**2)
+                mags.append(mag)
+        if len(mags) > 0:
+            gyro_magnitudes.append(np.mean(mags))
+    
+    if len(gyro_magnitudes) > 0:
+        gyro_mag_arr = np.array(gyro_magnitudes)
+        features['gyro_magnitude_mean'] = float(np.mean(gyro_mag_arr))
+        features['gyro_magnitude_std'] = float(np.std(gyro_mag_arr))
+        features['gyro_magnitude_max'] = float(np.max(gyro_mag_arr))
+        features['gyro_magnitude_min'] = float(np.min(gyro_mag_arr))
+        features['gyro_magnitude_range'] = float(np.max(gyro_mag_arr) - np.min(gyro_mag_arr))
+        # Speed indicator: higher gyro magnitude mean = faster movement
+        features['movement_intensity'] = float(np.mean(gyro_mag_arr))
+    else:
+        features['gyro_magnitude_mean'] = 0.0
+        features['gyro_magnitude_std'] = 0.0
+        features['gyro_magnitude_max'] = 0.0
+        features['gyro_magnitude_min'] = 0.0
+        features['gyro_magnitude_range'] = 0.0
+        features['movement_intensity'] = 0.0
     
     return features
 

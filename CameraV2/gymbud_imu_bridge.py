@@ -26,6 +26,17 @@ from dataclasses import dataclass, asdict
 import serial
 import websockets
 from websockets.server import serve
+import sys
+from pathlib import Path
+
+# Add utils directory to path for quaternion_vectors import
+sys.path.append(str(Path(__file__).parent))
+try:
+    from utils.quaternion_vectors import quaternion_to_unit_vectors
+    QUATERNION_VECTORS_AVAILABLE = True
+except ImportError:
+    QUATERNION_VECTORS_AVAILABLE = False
+    print("⚠️  quaternion_vectors module not available - unit vectors will be skipped")
 
 # ==================== CONFIGURATION ====================
 
@@ -274,7 +285,7 @@ class IMUBridge:
         
         # Running flag
         self.running = False
-        
+    
         # Callbacks for external systems (e.g., api_server.py for training data collection)
         # Callback signature: callback(node_id: int, sample: IMUSample, raw_values: dict)
         self.sample_callbacks: list = []
@@ -445,6 +456,31 @@ class IMUBridge:
                 }
             }
             
+            # Add unit vectors (normal, tangent, binormal) for orientation visualization
+            if QUATERNION_VECTORS_AVAILABLE:
+                try:
+                    unit_vectors = quaternion_to_unit_vectors(sample.qw, sample.qx, sample.qy, sample.qz)
+                    data["nodes"][sample.node_name]["unit_vectors"] = {
+                        "normal": {
+                            "x": float(unit_vectors['normal'][0]),
+                            "y": float(unit_vectors['normal'][1]),
+                            "z": float(unit_vectors['normal'][2])
+                        },
+                        "tangent": {
+                            "x": float(unit_vectors['tangent'][0]),
+                            "y": float(unit_vectors['tangent'][1]),
+                            "z": float(unit_vectors['tangent'][2])
+                        },
+                        "binormal": {
+                            "x": float(unit_vectors['binormal'][0]),
+                            "y": float(unit_vectors['binormal'][1]),
+                            "z": float(unit_vectors['binormal'][2])
+                        }
+                    }
+                except Exception as e:
+                    # Silently fail if unit vectors calculation fails
+                    pass
+            
             # Include formatted data string (ML-friendly format) for frontend display
             if node_id in self.raw_data_strings:
                 data["raw_data"][sample.node_name] = self.raw_data_strings[node_id]
@@ -459,13 +495,17 @@ class IMUBridge:
         msg_json = json.dumps(message)
         
         # Remove disconnected clients
+        # IMPORTANT: Use list() to create a copy - prevents "Set changed size during iteration" error
         disconnected = set()
-        for client in self.clients:
+        for client in list(self.clients):
             try:
                 await client.send(msg_json)
             except websockets.exceptions.ConnectionClosed:
                 disconnected.add(client)
+            except Exception:
+                disconnected.add(client)
         
+        # Safely remove disconnected clients
         self.clients -= disconnected
     
     async def handle_client(self, websocket: websockets.WebSocketServerProtocol):

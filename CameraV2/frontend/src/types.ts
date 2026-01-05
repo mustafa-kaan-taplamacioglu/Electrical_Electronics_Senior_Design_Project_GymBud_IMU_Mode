@@ -71,6 +71,12 @@ export type EulerAngles = {
   yaw: number;    // Z-axis rotation (degrees)
 }
 
+export type UnitVectors = {
+  normal: Vector3;    // Sensor's "up" direction (perpendicular to sensor surface)
+  tangent: Vector3;   // Forward direction (movement direction)
+  binormal: Vector3;   // Lateral direction (right side)
+}
+
 export type IMUNodeData = {
   node_id: number;
   timestamp: number;
@@ -78,6 +84,7 @@ export type IMUNodeData = {
   gyro: Vector3;      // Gyroscope data (deg/s)
   quaternion: Quaternion;
   euler: EulerAngles;
+  unit_vectors?: UnitVectors;  // Optional: Unit vectors for orientation visualization
 }
 
 export type IMUFusedData = {

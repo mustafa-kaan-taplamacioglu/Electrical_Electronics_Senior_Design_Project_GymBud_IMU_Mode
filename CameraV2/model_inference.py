@@ -147,6 +147,7 @@ class ModelInference:
             
         Returns:
             Predicted form score (0-100) or None if model not available
+            For multi-output models, returns the average of regional scores
         """
         if not self.load_imu_model():
             return None
@@ -159,10 +160,29 @@ class ModelInference:
         
         # Predict
         try:
-            score = self.imu_model.predict(features)
-            return float(score)
+            scores = self.imu_model.predict(features)
+            # ml_trainer.predict() returns a dict: {"arms": float, "legs": float, ...} or {"score": float}
+            if isinstance(scores, dict):
+                if 'score' in scores:
+                    # Single-output model
+                    return float(scores['score'])
+                else:
+                    # Multi-output model: return average of regional scores
+                    regional_scores = [scores.get(region, 0.0) for region in ['arms', 'legs', 'core', 'head'] if region in scores]
+                    if regional_scores:
+                        return float(sum(regional_scores) / len(regional_scores))
+                    else:
+                        return None
+            elif isinstance(scores, (list, np.ndarray)):
+                # Direct array output (shouldn't happen with current ml_trainer, but handle it)
+                return float(np.mean(scores))
+            else:
+                # Single float value
+                return float(scores)
         except Exception as e:
             print(f"⚠️  IMU model prediction error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def predict_fusion(self, landmarks_sequence: list, imu_sequence: list, 

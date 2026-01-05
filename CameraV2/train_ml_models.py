@@ -5,6 +5,10 @@ Manually train ML models using collected datasets from MLTRAINCAMERA and MLTRAIN
 This script can be run independently to train models or update existing models.
 """
 
+import warnings
+# Suppress sklearn parallel warnings (harmless but annoying)
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn.utils.parallel')
+
 import argparse
 from pathlib import Path
 from typing import List
@@ -173,7 +177,7 @@ def train_camera_model(exercise: str, use_unused_only: bool = False, multi_outpu
         print(f"   ⚠️  Tuning failed: {e}. Using default parameters...")
         import traceback
         traceback.print_exc()
-        results = predictor.train(labeled_samples, verbose=True, use_imu_features=False)
+    results = predictor.train(labeled_samples, verbose=True, use_imu_features=False)
     
     # Save model (exercise-specific path) with extended metadata
     model_name_suffix = "multi_output" if multi_output else "single_output"
@@ -622,7 +626,7 @@ def train_fusion_model(exercise: str, use_unused_only: bool = False, multi_outpu
     
     if len(labeled_samples) < 10:
         print(f"❌ Not enough labeled samples (need >=10, got {len(labeled_samples)})")
-        return False
+    return False
     
     # Add temporal features to fusion samples
     print("   Extracting temporal features (periodic movement patterns)...")
@@ -712,47 +716,240 @@ def train_fusion_model(exercise: str, use_unused_only: bool = False, multi_outpu
     
     predictor = FusionPredictor(model_type="random_forest", multi_output=multi_output)
     
-    # HYPERPARAMETER TUNING (with improved parameters to reduce overfitting)
-    print(f"\n🔧 Hyperparameter Tuning (to improve generalization and reduce overfitting)...")
+    # Prepare features first to get initial feature count
+    print(f"\n📊 Preparing features for fusion model...")
+    X_init, y_init = predictor.prepare_features(labeled_samples, use_imu_features=False)
+    initial_feature_count = X_init.shape[1]
+    print(f"   Initial feature count: {initial_feature_count}")
+    
+    # FEATURE SELECTION (to reduce curse of dimensionality for fusion model)
+    # Use RandomForest feature importance instead of univariate selection for better performance
+    print(f"\n🔍 Feature Selection (reducing from {initial_feature_count} features)...")
+    from sklearn.ensemble import RandomForestRegressor as RF
+    import numpy as np
+    
+    # Train/test split for feature selection
+    from sklearn.model_selection import train_test_split
+    X_train_fs, X_test_fs, y_train_fs, y_test_fs = train_test_split(
+        X_init, y_init, test_size=0.2, random_state=42
+    )
+    
+    # Scale features
+    X_train_fs_scaled = predictor.scaler.fit_transform(X_train_fs)
+    X_test_fs_scaled = predictor.scaler.transform(X_test_fs)
+    
+    # Method: Use RandomForest feature importance (better than univariate)
+    # More aggressive selection: keep only top 40-50% of features (vs 65% before)
+    # This reduces overfitting and improves generalization
+    if multi_output:
+        # For multi-output, use MultiOutputRegressor
+        from sklearn.multioutput import MultiOutputRegressor
+        rf_selector = RF(n_estimators=100, max_depth=10, min_samples_split=10, 
+                        min_samples_leaf=5, random_state=42, n_jobs=-1)
+        rf_selector = MultiOutputRegressor(rf_selector, n_jobs=-1)
+        y_for_selection = y_train_fs
+    else:
+        rf_selector = RF(n_estimators=100, max_depth=10, min_samples_split=10, 
+                        min_samples_leaf=5, random_state=42, n_jobs=-1)
+        y_for_selection = y_train_fs
+    
+    # Train a quick RF to get feature importances
+    rf_selector.fit(X_train_fs_scaled, y_for_selection)
+    
+    # Get feature importances (handle multi-output)
+    if multi_output:
+        # Average importance across all outputs
+        importances = np.mean([est.feature_importances_ for est in rf_selector.estimators_], axis=0)
+    else:
+        importances = rf_selector.feature_importances_
+    
+    # Select top features based on importance threshold
+    # Optimized selection: Balance between reducing overfitting and maintaining performance
+    # Use 45-50% to reduce overfitting while keeping enough features for good performance
+    k_select = max(int(initial_feature_count * 0.48), 140)  # 48% or min 140 features
+    k_select = min(k_select, 200)  # Max 200 features (reduce overfitting)
+    
+    # Get top k features by importance
+    top_k_indices = np.argsort(importances)[-k_select:][::-1]
+    selected_feature_indices = sorted(top_k_indices)
+    
+    print(f"   Selected {len(selected_feature_indices)} features using RandomForest importance (top {k_select})")
+    print(f"   Feature importance range: {importances[selected_feature_indices].min():.4f} - {importances[selected_feature_indices].max():.4f}")
+    
+    # Apply feature selection to feature names
+    if predictor.feature_names:
+        predictor.selected_feature_names = [predictor.feature_names[i] for i in selected_feature_indices]
+        predictor.feature_names = predictor.selected_feature_names
+        print(f"   Reduced feature count: {initial_feature_count} -> {len(predictor.feature_names)} ({len(predictor.feature_names)/initial_feature_count*100:.1f}%)")
+    
+    # Apply feature selection to the data (slice X_init to only selected features)
+    X_selected = X_init[:, selected_feature_indices]
+    y_selected = y_init
+    
+    # HYPERPARAMETER TUNING (with improved parameters for fusion model - more regularization)
+    print(f"\n🔧 Hyperparameter Tuning (with improved regularization for fusion model)...")
     try:
-        best_params = predictor.tune_hyperparameters(
-            labeled_samples,
-            cv=5,
-            method="random",
-            n_iter=30,
-            verbose=False,
-            use_imu_features=False  # Combined features handled in prepare_features
+        # Use custom hyperparameter tuning with more aggressive regularization
+        # For fusion model with many features, we want to prevent overfitting
+        
+        # Apply feature selection to the data
+        X_train_hp, X_test_hp, y_train_hp, y_test_hp = train_test_split(
+            X_selected, y_selected, test_size=0.2, random_state=42
         )
-        if best_params:
-            print(f"   ✅ Best hyperparameters found:")
-            for param, value in best_params.items():
-                print(f"      {param}: {value}")
-            # Evaluate tuned model
-            print(f"   📊 Evaluating tuned model...")
-            from sklearn.model_selection import train_test_split
-            from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-            X, y = predictor.prepare_features(labeled_samples, use_imu_features=False)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-            X_train_scaled = predictor.scaler.fit_transform(X_train)
-            X_test_scaled = predictor.scaler.transform(X_test)
+        X_train_hp_scaled = predictor.scaler.fit_transform(X_train_hp)
+        X_test_hp_scaled = predictor.scaler.transform(X_test_hp)
+        
+        # Custom hyperparameter tuning with more regularization
+        from sklearn.model_selection import RandomizedSearchCV
+        from scipy.stats import randint
+        
+        # Optimized regularization for fusion model - "normally fitted" (balanced train/test)
+        # Goal: Reduce overfitting (small gap) while maintaining good test performance
+        # For MultiOutputRegressor, we need to use 'estimator__' prefix
+        if multi_output:
+            param_dist = {
+                'estimator__n_estimators': randint(150, 300),  # Moderate trees for generalization
+                'estimator__max_depth': [10, 12, 15, 18, 20, None],  # Limit depth to reduce overfitting
+                'estimator__min_samples_split': randint(10, 30),  # Higher = more regularization (reduce overfitting)
+                'estimator__min_samples_leaf': randint(3, 15),  # Higher = more regularization (reduce overfitting)
+                'estimator__max_features': ['sqrt', 'log2', 0.5]  # Limit features per split (reduce overfitting)
+            }
+            base_model = RF(random_state=42, n_jobs=-1)
+            from sklearn.multioutput import MultiOutputRegressor
+            search_model = MultiOutputRegressor(base_model, n_jobs=-1)
+        else:
+            param_dist = {
+                'n_estimators': randint(150, 300),  # Moderate trees for generalization
+                'max_depth': [10, 12, 15, 18, 20, None],  # Limit depth to reduce overfitting
+                'min_samples_split': randint(10, 30),  # Higher = more regularization (reduce overfitting)
+                'min_samples_leaf': randint(3, 15),  # Higher = more regularization (reduce overfitting)
+                'max_features': ['sqrt', 'log2', 0.5]  # Limit features per split (reduce overfitting)
+            }
+            search_model = RF(random_state=42, n_jobs=-1)
+        
+        search = RandomizedSearchCV(
+            search_model,
+            param_dist,
+            n_iter=100,  # More iterations for better tuning (increased from 50)
+            cv=5,
+            scoring='neg_mean_absolute_error',
+            n_jobs=-1,
+            random_state=42,
+            verbose=0
+        )
+        
+        print(f"   Running RandomizedSearchCV with 100 iterations...")
+        search.fit(X_train_hp_scaled, y_train_hp)
+        
+        best_params = search.best_params_
+        predictor.model = search.best_estimator_
+        
+        print(f"   ✅ Best hyperparameters found:")
+        for param, value in best_params.items():
+            print(f"      {param}: {value}")
+        print(f"      Best CV MAE: {-search.best_score_:.2f}")
+        # Evaluate tuned model with feature selection
+        print(f"   📊 Evaluating tuned model with feature selection...")
+        from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+        
+        y_train_pred = predictor.model.predict(X_train_hp_scaled)
+        y_test_pred = predictor.model.predict(X_test_hp_scaled)
             
-            y_train_pred = predictor.model.predict(X_train_scaled)
-            y_test_pred = predictor.model.predict(X_test_scaled)
+        if multi_output:
+            train_r2 = r2_score(y_train_hp, y_train_pred, multioutput='uniform_average')
+            test_r2 = r2_score(y_test_hp, y_test_pred, multioutput='uniform_average')
+            train_mae = mean_absolute_error(y_train_hp, y_train_pred, multioutput='uniform_average')
+            test_mae = mean_absolute_error(y_test_hp, y_test_pred, multioutput='uniform_average')
+            train_mse = mean_squared_error(y_train_hp, y_train_pred, multioutput='uniform_average')
+            test_mse = mean_squared_error(y_test_hp, y_test_pred, multioutput='uniform_average')
+        else:
+            train_r2 = r2_score(y_train_hp, y_train_pred)
+            test_r2 = r2_score(y_test_hp, y_test_pred)
+            train_mae = mean_absolute_error(y_train_hp, y_train_pred)
+            test_mae = mean_absolute_error(y_test_hp, y_test_pred)
+            train_mse = mean_squared_error(y_train_hp, y_train_pred)
+            test_mse = mean_squared_error(y_test_hp, y_test_pred)
+        
+        results = {
+            'train_mse': train_mse,
+            'test_mse': test_mse,
+            'train_mae': train_mae,
+            'test_mae': test_mae,
+            'train_r2': train_r2,
+            'test_r2': test_r2
+        }
+        predictor.is_trained = True
+        
+        print(f"\n📈 Tuned Model Results (with feature selection):")
+        print(f"   Features: {initial_feature_count} -> {len(predictor.feature_names)} (selected)")
+        print(f"   Train MSE: {train_mse:.2f}")
+        print(f"   Test MSE:  {test_mse:.2f}")
+        print(f"   Train MAE: {train_mae:.2f}")
+        print(f"   Test MAE:  {test_mae:.2f}")
+        print(f"   Train R²:  {train_r2:.3f}")
+        print(f"   Test R²:   {test_r2:.3f}")
+        gap = train_r2 - test_r2
+        if gap < 0:
+            print(f"   Gap: {gap:.3f} ✅ Excellent (Test > Train = Great generalization!)")
+        elif gap < 0.1:
+            print(f"   Gap: {gap:.3f} ✅ Excellent (no overfitting)")
+        elif gap < 0.2:
+            print(f"   Gap: {gap:.3f} ✅ Good (minimal overfitting)")
+        elif gap < 0.5:
+            print(f"   Gap: {gap:.3f} ⚠️  Moderate overfitting")
+        else:
+            print(f"   Gap: {gap:.3f} ❌ High overfitting")
+    except Exception as e:
+        print(f"   ⚠️  Tuning failed: {e}. Using default parameters with feature selection...")
+        import traceback
+        traceback.print_exc()
+        # Apply feature selection even if tuning fails
+        try:
+            X_fs, y_fs = predictor.prepare_features(labeled_samples, use_imu_features=False)
+            X_train_fs, X_test_fs, y_train_fs, y_test_fs = train_test_split(
+                X_fs, y_fs, test_size=0.2, random_state=42
+            )
+            X_train_fs_scaled = predictor.scaler.fit_transform(X_train_fs)
+            X_test_fs_scaled = predictor.scaler.transform(X_test_fs)
             
+            # Use default model with optimized regularization (normally fitted - balanced)
+            from sklearn.ensemble import RandomForestRegressor as RF
+            base_model = RF(
+                n_estimators=200,  # Moderate trees for generalization
+                max_depth=15,  # Moderate depth (reduce overfitting)
+                min_samples_split=15,  # Higher = more regularization
+                min_samples_leaf=5,  # Higher = more regularization
+                max_features='sqrt',  # Standard feature selection
+                random_state=42,
+                n_jobs=-1
+            )
             if multi_output:
-                train_r2 = r2_score(y_train, y_train_pred, multioutput='uniform_average')
-                test_r2 = r2_score(y_test, y_test_pred, multioutput='uniform_average')
-                train_mae = mean_absolute_error(y_train, y_train_pred, multioutput='uniform_average')
-                test_mae = mean_absolute_error(y_test, y_test_pred, multioutput='uniform_average')
-                train_mse = mean_squared_error(y_train, y_train_pred, multioutput='uniform_average')
-                test_mse = mean_squared_error(y_test, y_test_pred, multioutput='uniform_average')
+                from sklearn.multioutput import MultiOutputRegressor
+                predictor.model = MultiOutputRegressor(base_model, n_jobs=-1)
             else:
-                train_r2 = r2_score(y_train, y_train_pred)
-                test_r2 = r2_score(y_test, y_test_pred)
-                train_mae = mean_absolute_error(y_train, y_train_pred)
-                test_mae = mean_absolute_error(y_test, y_test_pred)
-                train_mse = mean_squared_error(y_train, y_train_pred)
-                test_mse = mean_squared_error(y_test, y_test_pred)
+                predictor.model = base_model
+            
+            predictor.model.fit(X_train_fs_scaled, y_train_fs)
+            predictor.is_trained = True
+            
+            y_train_pred = predictor.model.predict(X_train_fs_scaled)
+            y_test_pred = predictor.model.predict(X_test_fs_scaled)
+            
+            from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+            if multi_output:
+                train_r2 = r2_score(y_train_fs, y_train_pred, multioutput='uniform_average')
+                test_r2 = r2_score(y_test_fs, y_test_pred, multioutput='uniform_average')
+                train_mae = mean_absolute_error(y_train_fs, y_train_pred, multioutput='uniform_average')
+                test_mae = mean_absolute_error(y_test_fs, y_test_pred, multioutput='uniform_average')
+                train_mse = mean_squared_error(y_train_fs, y_train_pred, multioutput='uniform_average')
+                test_mse = mean_squared_error(y_test_fs, y_test_pred, multioutput='uniform_average')
+            else:
+                train_r2 = r2_score(y_train_fs, y_train_pred)
+                test_r2 = r2_score(y_test_fs, y_test_pred)
+                train_mae = mean_absolute_error(y_train_fs, y_train_pred)
+                test_mae = mean_absolute_error(y_test_fs, y_test_pred)
+                train_mse = mean_squared_error(y_train_fs, y_train_pred)
+                test_mse = mean_squared_error(y_test_fs, y_test_pred)
             
             results = {
                 'train_mse': train_mse,
@@ -762,34 +959,10 @@ def train_fusion_model(exercise: str, use_unused_only: bool = False, multi_outpu
                 'train_r2': train_r2,
                 'test_r2': test_r2
             }
-            predictor.is_trained = True
-            
-            print(f"\n📈 Tuned Model Results:")
-            print(f"   Train MSE: {train_mse:.2f}")
-            print(f"   Test MSE:  {test_mse:.2f}")
-            print(f"   Train MAE: {train_mae:.2f}")
-            print(f"   Test MAE:  {test_mae:.2f}")
-            print(f"   Train R²:  {train_r2:.3f}")
-            print(f"   Test R²:   {test_r2:.3f}")
-            gap = train_r2 - test_r2
-            if gap < 0:
-                print(f"   Gap: {gap:.3f} ✅ Excellent (Test > Train = Great generalization!)")
-            elif gap < 0.1:
-                print(f"   Gap: {gap:.3f} ✅ Excellent (no overfitting)")
-            elif gap < 0.2:
-                print(f"   Gap: {gap:.3f} ✅ Good (minimal overfitting)")
-            elif gap < 0.5:
-                print(f"   Gap: {gap:.3f} ⚠️  Moderate overfitting")
-            else:
-                print(f"   Gap: {gap:.3f} ❌ High overfitting")
-        else:
-            print(f"   ⚠️  Tuning skipped. Training with default parameters...")
+            print(f"   ✅ Trained with default parameters (regularized) and feature selection")
+        except Exception as e2:
+            print(f"   ⚠️  Feature selection also failed: {e2}. Using original training method...")
             results = predictor.train(labeled_samples, verbose=True, use_imu_features=False)
-    except Exception as e:
-        print(f"   ⚠️  Tuning failed: {e}. Using default parameters...")
-        import traceback
-        traceback.print_exc()
-        results = predictor.train(labeled_samples, verbose=True, use_imu_features=False)  # Combined features handled in prepare_features
     
     # Save model (exercise-specific path)
     model_name_suffix = "multi_output" if multi_output else "single_output"

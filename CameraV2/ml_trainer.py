@@ -166,7 +166,7 @@ class FormScorePredictor:
                 print(f"   Label range: {y.min():.1f} - {y.max():.1f} (per region)")
             else:
                 print(f"   Output: Single overall score")
-                print(f"   Label range: {y.min():.1f} - {y.max():.1f}")
+            print(f"   Label range: {y.min():.1f} - {y.max():.1f}")
         
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(
@@ -222,17 +222,17 @@ class FormScorePredictor:
             test_mse = mean_squared_error(y_test, y_test_pred)
             train_mae = mean_absolute_error(y_train, y_train_pred)
             test_mae = mean_absolute_error(y_test, y_test_pred)
-            train_r2 = r2_score(y_train, y_train_pred)
-            test_r2 = r2_score(y_test, y_test_pred)
-            
-            if verbose:
-                print(f"\n📈 Results:")
-                print(f"   Train MSE: {train_mse:.2f}")
-                print(f"   Test MSE:  {test_mse:.2f}")
-                print(f"   Train MAE: {train_mae:.2f}")
-                print(f"   Test MAE:  {test_mae:.2f}")
-                print(f"   Train R²:  {train_r2:.3f}")
-                print(f"   Test R²:   {test_r2:.3f}")
+        train_r2 = r2_score(y_train, y_train_pred)
+        test_r2 = r2_score(y_test, y_test_pred)
+        
+        if verbose:
+            print(f"\n📈 Results:")
+            print(f"   Train MSE: {train_mse:.2f}")
+            print(f"   Test MSE:  {test_mse:.2f}")
+            print(f"   Train MAE: {train_mae:.2f}")
+            print(f"   Test MAE:  {test_mae:.2f}")
+            print(f"   Train R²:  {train_r2:.3f}")
+            print(f"   Test R²:   {test_r2:.3f}")
         
         self.is_trained = True
         
