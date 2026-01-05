@@ -835,42 +835,20 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 'regional_feedback': regional_feedbacks,
                                                                 'feedback': session_feedback,
                                                                 'workout_complete': True,
-                                                                'message': 'Workout completed automatically! All sets and reps finished.'
+                                                                'message': 'Workout completed automatically! All sets and reps finished.',
+                                                                # Add ml_mode and flags for training dialog
+                                                                'ml_mode': ml_mode,
+                                                                'collected_count': collected_count,
+                                                                'show_training_dialog': True
                                                             }
                                                             
-                                                            # Save training datasets if in train mode
+                                                            # IMU-only mode: DON'T auto-save - let user decide via dialog
                                                             if ml_mode == 'train':
-                                                                try:
-                                                                    imu_collector = imu_training_collectors.get(exercise)
-                                                                    session_imu_samples = active_session.get('session_imu_samples', [])
-                                                                    session_start_time = active_session.get('session_start_time', time.time())
-                                                                    
-                                                                    # Add session-level IMU data
-                                                                    if imu_collector and imu_collector.is_collecting and session_imu_samples:
-                                                                        try:
-                                                                            imu_data_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in session_imu_samples]
-                                                                            imu_collector.add_rep_sequence(
-                                                                                rep_number=0,
-                                                                                imu_sequence=imu_data_seq,
-                                                                                rep_start_time=session_start_time
-                                                                            )
-                                                                            print(f"📡 Added session-level continuous IMU data: {len(imu_data_seq)} samples (rep_number=0)")
-                                                                        except Exception as e:
-                                                                            print(f"⚠️  Failed to add session-level IMU data: {e}")
-                                                                    
-                                                                    # Save IMU collector
-                                                                    if imu_collector and len(imu_collector.current_samples) > 0:
-                                                                        imu_session_id = imu_collector.current_session_id
-                                                                        num_samples = len(imu_collector.current_samples)
-                                                                        imu_collector.save_session()
-                                                                        print(f"💾 Saved IMU training dataset: {num_samples} sequences → MLTRAINIMU/{exercise}/ (session: {imu_session_id})")
-                                                                        active_session['imu_session_id'] = imu_session_id
-                                                                        imu_collector.stop_session()
-                                                                        print(f"✅ Training session completed: {collected_count} reps saved to training datasets")
-                                                                except Exception as e:
-                                                                    print(f"⚠️  Failed to save training datasets when workout completed: {e}")
-                                                                    import traceback
-                                                                    traceback.print_exc()
+                                                                imu_collector = imu_training_collectors.get(exercise)
+                                                                imu_samples = len(imu_collector.current_samples) if imu_collector else 0
+                                                                session_imu_count = len(active_session.get('session_imu_samples', []))
+                                                                print(f"📊 IMU-only Train mode data ready (NOT saved yet - waiting for user decision):")
+                                                                print(f"   IMU collector: {imu_samples} rep sequences + {session_imu_count} session samples")
                                                             
                                                             # Send session summary
                                                             if session_websocket:
@@ -1620,79 +1598,27 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 response['baseline_similarity'] = rep_result.get('baseline_similarity')
                                 response['hybrid_score'] = rep_result.get('hybrid_score')
                                 
-                                # Workout tamamlandığında otomatik kayıt yap (train mode için)
+                                # Workout tamamlandığında veriyi henüz kaydetME - kullanıcıya sor
+                                # Data is NOT saved here - user will decide via training dialog
                                 ml_mode = session.get('ml_mode', 'usage')
+                                collected_count = session.get('collected_reps_count', 0)
+                                
+                                # Add ml_mode and collected_count to summary for dialog
+                                summary_data['ml_mode'] = ml_mode
+                                summary_data['collected_count'] = collected_count
+                                summary_data['show_training_dialog'] = True  # Always show dialog
+                                
+                                # Log data status
                                 if ml_mode == 'train':
-                                    try:
-                                        camera_collector = camera_training_collectors.get(exercise)
-                                        imu_collector = imu_training_collectors.get(exercise)
-                                        collected_count = session.get('collected_reps_count', 0)
-
-                                        # Add session-level continuous data (all data throughout session, rep sayılsın ya da sayılmasın)
-                                        session_landmarks = session.get('session_landmarks', [])
-                                        session_imu_samples = session.get('session_imu_samples', [])
-                                        session_start_time = session.get('session_start_time', time.time())
-
-                                        # Extract landmarks from session buffer
-                                        landmarks_sequence = [item['landmarks'] for item in session_landmarks]
-                                        
-                                        if camera_collector and camera_collector.is_collecting and landmarks_sequence:
-                                            try:
-                                                camera_collector.add_rep_sample(
-                                                    exercise=exercise,
-                                                    rep_number=0,  # rep_number=0 means session-level continuous data
-                                                    landmarks_sequence=landmarks_sequence,
-                                                    imu_sequence=None,
-                                                    user_id='default'
-                                                )
-                                                print(f"📹 Added session-level continuous camera data: {len(landmarks_sequence)} frames (rep_number=0)")
-                                            except Exception as e:
-                                                print(f"⚠️  Failed to add session-level camera data: {e}")
-
-                                        # Add session-level IMU data
-                                        if imu_collector and imu_collector.is_collecting and session_imu_samples:
-                                            print(f"🔍 Debug (workout_complete): session_imu_samples size={len(session_imu_samples)}")
-                                            try:
-                                                # Remove rep_number from samples before adding to collector
-                                                imu_data_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in session_imu_samples]
-                                                imu_collector.add_rep_sequence(
-                                                    rep_number=0,  # rep_number=0 means session-level continuous data
-                                                    imu_sequence=imu_data_seq,
-                                                    rep_start_time=session_start_time
-                                                )
-                                                print(f"📡 Added session-level continuous IMU data: {len(imu_data_seq)} samples (rep_number=0)")
-                                            except Exception as e:
-                                                print(f"⚠️  Failed to add session-level IMU data: {e}")
-                                                import traceback
-                                                traceback.print_exc()
-                                        else:
-                                            print(f"⚠️  session_imu_samples is empty in workout_complete, cannot add session-level IMU data")
-
-                                        # Save if collectors exist and have data (including session-level)
-                                        if camera_collector and len(camera_collector.current_samples) > 0:
-                                            camera_session_id = camera_collector.current_session_id
-                                            num_samples = len(camera_collector.current_samples)
-                                            camera_collector.save_session(auto_label_perfect=True)
-                                            print(f"💾 Saved camera training dataset: {num_samples} samples (reps + session-level) → MLTRAINCAMERA/{exercise}/ (session: {camera_session_id})")
-                                            session['camera_session_id'] = camera_session_id
-                                            # Note: save_session() already sets is_collecting = False
-
-                                        if imu_collector and len(imu_collector.current_samples) > 0:
-                                            imu_session_id = imu_collector.current_session_id
-                                            num_samples = len(imu_collector.current_samples)
-                                            imu_collector.save_session()
-                                            print(f"💾 Saved IMU training dataset: {num_samples} sequences (reps + session-level) → MLTRAINIMU/{exercise}/ (session: {imu_session_id})")
-                                            session['imu_session_id'] = imu_session_id
-                                            imu_collector.stop_session()
-
-                                        # Check if data was saved successfully
-                                        camera_session_id = session.get('camera_session_id')
-                                        imu_session_id = session.get('imu_session_id')
-                                        print(f"✅ Training session completed: {collected_count} reps saved to training datasets")
-                                    except Exception as e:
-                                        print(f"⚠️  Failed to save training datasets when workout completed: {e}")
-                                        import traceback
-                                        traceback.print_exc()
+                                    camera_collector = camera_training_collectors.get(exercise)
+                                    imu_collector = imu_training_collectors.get(exercise)
+                                    camera_samples = len(camera_collector.current_samples) if camera_collector else 0
+                                    imu_samples = len(imu_collector.current_samples) if imu_collector else 0
+                                    session_landmarks_count = len(session.get('session_landmarks', []))
+                                    session_imu_count = len(session.get('session_imu_samples', []))
+                                    print(f"📊 Train mode data ready (NOT saved yet - waiting for user decision):")
+                                    print(f"   Camera collector: {camera_samples} rep samples + {session_landmarks_count} session frames")
+                                    print(f"   IMU collector: {imu_samples} rep sequences + {session_imu_count} session samples")
 
                                 # Send final rep update
                                 try:
@@ -2179,15 +2105,21 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                     # Skip: Don't save data (already collected during session, but mark as not to be used)
                     print(f"⏭️  User chose: Skip (data will not be saved)")
                     
-                        # For train mode, data was collected but user wants to skip
-                        # We could delete the session data here, but for now just acknowledge
                     if ml_mode == 'train':
                         # For train mode, data was collected but user wants to skip
-                        # We could delete the session data here, but for now just acknowledge
+                        # Clear collectors' data
+                        camera_collector = camera_training_collectors.get(exercise)
                         imu_collector = imu_training_collectors.get(exercise)
-                        if camera_collector:
-                                imu_collector.current_samples = []  # Clear collected samples
-                        print(f"   Cleared training data for {exercise}")
+                        
+                        if camera_collector and camera_collector.is_collecting:
+                            camera_collector.current_samples = []  # Clear collected samples
+                            camera_collector.stop_session()
+                            print(f"   Cleared camera training data for {exercise}")
+                        
+                        if imu_collector and imu_collector.is_collecting:
+                            imu_collector.current_samples = []  # Clear collected samples
+                            imu_collector.stop_session()
+                            print(f"   Cleared IMU training data for {exercise}")
                     
                     await websocket.send_json({
                         'type': 'training_status',
