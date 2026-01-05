@@ -216,12 +216,13 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         else:
                             session['fusion_mode'] = 'camera_only'
 
-                    # IMU-only mode: Initialize Hybrid IMU rep detector (gyro peak + ML validation)
+                    # Initialize Hybrid IMU rep detector for ALL modes (gyro peak + ML validation)
+                    # This enables IMU-based rep detection even in fusion/camera modes
+                    session['imu_periodic_detector'] = HybridIMURepDetector(exercise, ml_inference_instance)
+                    print(f"✅ Hybrid IMU rep detector initialized for {exercise} (gyro peak + ML validation)")
+                    
+                    # IMU-only mode: Start countdown immediately
                     if fusion_mode == 'imu_only':
-                        # Use Hybrid detector (primary: gyro peak detection, secondary: ML validation)
-                        # This combines proven rule-based detection with ML quality check
-                        session['imu_periodic_detector'] = HybridIMURepDetector(exercise, ml_inference_instance)
-                        print(f"✅ Hybrid IMU rep detector initialized for {exercise} (gyro peak + ML validation)")
                         # Start countdown for IMU-only mode (like camera mode)
                         session['state'] = 'countdown'
                         print(f"🚀 IMU-only mode: Starting countdown before tracking")
@@ -1052,6 +1053,15 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                 
                 # IMU-only mode: Skip pose processing (rep detection handled by IMU bridge WebSocket)
                 if session.get('fusion_mode') == 'imu_only':
+                    continue
+                
+                # Extract landmarks from pose data
+                landmarks = data.get('pose', [])
+                if not landmarks:
+                    # No landmarks data, skip processing but still save for training if enabled
+                    if session.get('dataset_collection_enabled') and ml_mode == 'train':
+                        # Still collect IMU data even without body detection
+                        pass
                     continue
                 
                 form_analyzer = session['form_analyzer']
