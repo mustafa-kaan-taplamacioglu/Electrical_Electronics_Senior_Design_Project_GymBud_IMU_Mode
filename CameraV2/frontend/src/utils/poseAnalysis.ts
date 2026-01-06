@@ -95,7 +95,7 @@ export const getPrimaryAngle = (
       );
       return (leftShoulder + rightShoulder) / 2;
 
-    case 'triceps_pushdown':
+    case 'tricep_extensions':
       return calculateAngle(
         landmarks[LANDMARKS.LEFT_SHOULDER],
         landmarks[LANDMARKS.LEFT_ELBOW],
@@ -378,7 +378,7 @@ export const checkForm = (
     }
     
     // ==================== TRICEPS PUSHDOWN ====================
-    case 'triceps_pushdown': {
+    case 'tricep_extensions': {
       checkUpperBodyStability();
       
       // 1. Üst kol sabit olmalı
@@ -560,7 +560,7 @@ export const checkForm = (
 const getRequiredLandmarks = (exercise: ExerciseType): number[] => {
   switch (exercise) {
     case 'bicep_curls':
-    case 'triceps_pushdown':
+    case 'tricep_extensions':
     case 'lateral_shoulder_raises':
     case 'dumbbell_shoulder_press':
       // Upper body exercises: Face (0-10) + Upper Body (11-16) + Hands (17-22) = 23 landmarks
@@ -597,7 +597,7 @@ const ANGLE_REQUIREMENTS: Record<string, { minAngle: number; maxAngle: number; t
   bicep_curls: { minAngle: 35, maxAngle: 150, tolerance: 15 },      // Dirsek: 35°-150° arası hareket
   squats: { minAngle: 70, maxAngle: 170, tolerance: 15 },           // Diz: 70°-170° arası
   lateral_shoulder_raises: { minAngle: 15, maxAngle: 85, tolerance: 10 }, // Omuz: 15°-85° arası
-  triceps_pushdown: { minAngle: 45, maxAngle: 165, tolerance: 15 }, // Dirsek: 45°-165° arası
+  tricep_extensions: { minAngle: 45, maxAngle: 165, tolerance: 15 }, // Dirsek: 45°-165° arası
   dumbbell_rows: { minAngle: 45, maxAngle: 160, tolerance: 15 },    // Dirsek: 45°-160° arası
   dumbbell_shoulder_press: { minAngle: 75, maxAngle: 170, tolerance: 15 }, // Dirsek: 75°-170° arası
 };
@@ -735,7 +735,7 @@ export const updateRepCounter = (
       break;
     
     // Triceps pushdown: Açı ARTAR yukarı iterken (160° üst, 60° alt)
-    case 'triceps_pushdown':
+    case 'tricep_extensions':
       if (state.phase === 'down' && angle > up) {
         newState.phase = 'up';
       } else if (state.phase === 'up' && angle < down) {

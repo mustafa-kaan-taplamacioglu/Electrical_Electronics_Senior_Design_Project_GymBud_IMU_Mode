@@ -626,7 +626,7 @@ def train_fusion_model(exercise: str, use_unused_only: bool = False, multi_outpu
     
     if len(labeled_samples) < 10:
         print(f"❌ Not enough labeled samples (need >=10, got {len(labeled_samples)})")
-    return False
+        return False
     
     # Add temporal features to fusion samples
     print("   Extracting temporal features (periodic movement patterns)...")
@@ -1012,7 +1012,7 @@ def main():
     parser = argparse.ArgumentParser(description="Train ML models for exercise form analysis")
     parser.add_argument('--exercise', type=str, required=True,
                        choices=['bicep_curls', 'squats', 
-                               'lateral_shoulder_raises', 'triceps_pushdown',
+                               'lateral_shoulder_raises', 'tricep_extensions',
                                'dumbbell_rows', 'dumbbell_shoulder_press'],
                        help='Exercise type to train')
     parser.add_argument('--mode', type=str, default='train',

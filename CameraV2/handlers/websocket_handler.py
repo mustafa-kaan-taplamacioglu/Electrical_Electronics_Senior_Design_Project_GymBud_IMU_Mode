@@ -109,7 +109,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
     """WebSocket endpoint for real-time pose analysis."""
     # Accept WebSocket connection first
     try:
-    await websocket.accept()
+        await websocket.accept()
         print(f"✅ WebSocket connection accepted for {exercise}")
     except Exception as e:
         print(f"⚠️  Failed to accept WebSocket connection: {e}")
@@ -175,7 +175,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                 pass  # client_state not available, continue
             
             try:
-            data = await websocket.receive_json()
+                data = await websocket.receive_json()
             except (RuntimeError, WebSocketDisconnect) as e:
                 print(f"⚠️  WebSocket receive error: {e}")
                 break
@@ -205,18 +205,18 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         print(f"✅ Fusion mode set to: {fusion_mode} (body detect: {'DISABLED' if fusion_mode == 'imu_only' else 'ENABLED'})")
                     else:
                         # Auto-detect fusion_mode based on available ML models
-                    ml_inference = session.get('ml_inference')
+                        ml_inference = session.get('ml_inference')
                         if ml_inference:
-                        has_camera = ml_inference.has_camera_model()
-                    has_imu = ml_inference.has_imu_model()
+                            has_camera = ml_inference.has_camera_model()
+                            has_imu = ml_inference.has_imu_model()
                             if has_camera and has_imu:
-                        session['fusion_mode'] = 'camera_primary'
-                    elif has_imu:
-                    session['fusion_mode'] = 'imu_only'
-                    else:
-                    session['fusion_mode'] = 'camera_only'
-                    else:
-                    session['fusion_mode'] = 'camera_only'
+                                session['fusion_mode'] = 'camera_primary'
+                            elif has_imu:
+                                session['fusion_mode'] = 'imu_only'
+                            else:
+                                session['fusion_mode'] = 'camera_only'
+                        else:
+                            session['fusion_mode'] = 'camera_only'
 
                     # Initialize Hybrid IMU rep detector for ALL modes (gyro peak + ML validation)
                     # This enables IMU-based rep detection even in fusion/camera modes
@@ -228,74 +228,74 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         # Start countdown for IMU-only mode (like camera mode)
                         session['state'] = 'countdown'
                         print(f"🚀 IMU-only mode: Starting countdown before tracking")
-                    try:
-                        await websocket.send_json({
-                    'type': 'state',
+                        try:
+                            await websocket.send_json({
+                                'type': 'state',
                                 'state': 'countdown',
                                 'message': 'IMU-only mode: Get ready! Starting countdown...'
-                    })
+                            })
                             # Start countdown in background task
                             asyncio.create_task(countdown_task(websocket, session_id))
-                    except (RuntimeError, WebSocketDisconnect, AttributeError):
-                    pass
+                        except (RuntimeError, WebSocketDisconnect, AttributeError):
+                            pass
                     
                     # Usage mode: data recording enabled automatically
                     # Train mode: dataset collection enabled automatically
                     if ml_mode == 'usage':
-                    session['dataset_collection_enabled'] = True  # Usage mode records data
+                        session['dataset_collection_enabled'] = True  # Usage mode records data
                         # Usage mode: automatically start dataset collector
                         try:
-                    user_id = data.get('user_id', 'default')
+                            user_id = data.get('user_id', 'default')
                             if dataset_collector:
-                    dataset_collector.start_session(exercise, user_id=user_id)
-                    session['collected_reps_count'] = 0
-                    print(f"✅ Usage mode: Dataset collector started for {exercise}")
-                    except Exception as e:
-                    print(f"⚠️  Failed to start dataset collector in usage mode: {e}")
-                    print(f"📊 Mode: {ml_mode} (Usage mode - data recording enabled)")
+                                dataset_collector.start_session(exercise, user_id=user_id)
+                                session['collected_reps_count'] = 0
+                                print(f"✅ Usage mode: Dataset collector started for {exercise}")
+                        except Exception as e:
+                            print(f"⚠️  Failed to start dataset collector in usage mode: {e}")
+                        print(f"📊 Mode: {ml_mode} (Usage mode - data recording enabled)")
                     
                     elif ml_mode == 'train':
                         # Train mode: start separate collectors for camera and IMU (exercise-specific)
-                    session['dataset_collection_enabled'] = True  # Train mode collects data
+                        session['dataset_collection_enabled'] = True  # Train mode collects data
 
                         # Create a shared session_id to ensure synchronization
                         # Both camera and IMU collectors will use the same session_id
-                    shared_session_id = f"{exercise}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                    session['training_session_id'] = shared_session_id
+                        shared_session_id = f"{exercise}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                        session['training_session_id'] = shared_session_id
 
                         # Get or create exercise-specific collectors
                         if exercise not in camera_training_collectors:
-                    camera_training_collectors[exercise] = DatasetCollector("MLTRAINCAMERA")
-                    camera_training_collectors[exercise].start_session(exercise)
+                            camera_training_collectors[exercise] = DatasetCollector("MLTRAINCAMERA")
+                            camera_training_collectors[exercise].start_session(exercise)
                             # Override session_id to ensure sync (in case they were created in different seconds)
-                    camera_training_collectors[exercise].current_session_id = shared_session_id
-                    print(f"📹 Camera training collector started for {exercise} (session: {shared_session_id})")
+                            camera_training_collectors[exercise].current_session_id = shared_session_id
+                            print(f"📹 Camera training collector started for {exercise} (session: {shared_session_id})")
 
                         if exercise not in imu_training_collectors:
-                    imu_training_collectors[exercise] = IMUDatasetCollector("MLTRAINIMU")
-                    imu_training_collectors[exercise].start_session(exercise)
+                            imu_training_collectors[exercise] = IMUDatasetCollector("MLTRAINIMU")
+                            imu_training_collectors[exercise].start_session(exercise)
                             # Override session_id to ensure sync (in case they were created in different seconds)
-                    imu_training_collectors[exercise].current_session_id = shared_session_id
-                    print(f"📡 IMU training collector started for {exercise} (session: {shared_session_id})")
+                            imu_training_collectors[exercise].current_session_id = shared_session_id
+                            print(f"📡 IMU training collector started for {exercise} (session: {shared_session_id})")
 
                             # Connect to gymbud_imu_bridge WebSocket to receive IMU data directly (bypass frontend throttling)
                             # IMPORTANT: Task is exercise-level, but rep detection is session-specific
-                                # Store this session_id for IMU bridge task to use
-                        session['imu_bridge_session_id'] = session_id
+                            # Store this session_id for IMU bridge task to use
+                            session['imu_bridge_session_id'] = session_id
 
-                                # Check if task already exists for this exercise
+                            # Check if task already exists for this exercise
                             if exercise not in imu_bridge_tasks:
-                        async def imu_bridge_client_task():
-                    """Connect to gymbud_imu_bridge WebSocket and receive IMU data directly."""
-                    IMU_BRIDGE_WS_URL = "ws://localhost:8765"
+                                async def imu_bridge_client_task():
+                                    """Connect to gymbud_imu_bridge WebSocket and receive IMU data directly."""
+                                    IMU_BRIDGE_WS_URL = "ws://localhost:8765"
 
-                    while True:
-                    try:
-                    async with websockets.connect(IMU_BRIDGE_WS_URL) as ws:
-                    print(f"✅ Connected to gymbud_imu_bridge WebSocket for {exercise}")
+                                    while True:
+                                        try:
+                                            async with websockets.connect(IMU_BRIDGE_WS_URL) as ws:
+                                                print(f"✅ Connected to gymbud_imu_bridge WebSocket for {exercise}")
 
-                    async for message in ws:
-                    try:
+                                                async for message in ws:
+                                                    try:
                                                         raw_data = json.loads(message)
                                                         
                                                         # Handle different data formats from gymbud_imu_bridge
@@ -318,35 +318,35 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                         if 'nodes' not in data or not isinstance(data.get('nodes'), dict):
                                                             continue
                                                         
-                                                                # Find the MOST RECENT active IMU-only session for this exercise
-                                                                # IMPORTANT: Only process for ONE session to prevent double counting
-                    target_session_id = None
-                    target_session = None
-                    latest_start_time = 0
+                                                        # Find the MOST RECENT active IMU-only session for this exercise
+                                                        # IMPORTANT: Only process for ONE session to prevent double counting
+                                                        target_session_id = None
+                                                        target_session = None
+                                                        latest_start_time = 0
 
-                    for active_session_id, active_session in list(sessions.items()):
+                                                        for active_session_id, active_session in list(sessions.items()):
                                                             if active_session.get('exercise') != exercise:
-                        continue
-                    fusion_mode = active_session.get('fusion_mode', 'camera_only')
+                                                                continue
+                                                            fusion_mode = active_session.get('fusion_mode', 'camera_only')
                                                             if fusion_mode not in ['imu_only', 'camera_primary']:
-                        continue
-                    active_session['training_session_started'] = True
+                                                                continue
+                                                            active_session['training_session_started'] = True
 
-                                                                    # Find the session with the most recent start time
-                                                                    # Use session_id as tiebreaker (higher = more recent)
-                    session_start = active_session.get('session_start_time', 0)
-                    session_id_numeric = int(str(active_session_id)[-10:]) if str(active_session_id)[-10:].isdigit() else 0
-                    comparison_value = (session_start, session_id_numeric)
-                    latest_comparison = (latest_start_time, int(str(target_session_id)[-10:]) if target_session_id and str(target_session_id)[-10:].isdigit() else 0)
+                                                            # Find the session with the most recent start time
+                                                            # Use session_id as tiebreaker (higher = more recent)
+                                                            session_start = active_session.get('session_start_time', 0)
+                                                            session_id_numeric = int(str(active_session_id)[-10:]) if str(active_session_id)[-10:].isdigit() else 0
+                                                            comparison_value = (session_start, session_id_numeric)
+                                                            latest_comparison = (latest_start_time, int(str(target_session_id)[-10:]) if target_session_id and str(target_session_id)[-10:].isdigit() else 0)
 
                                                             if comparison_value > latest_comparison:
-                        latest_start_time = session_start
-                    target_session_id = active_session_id
-                    target_session = active_session
+                                                                latest_start_time = session_start
+                                                                target_session_id = active_session_id
+                                                                target_session = active_session
 
-                                                                # If no active session found, skip this IMU sample
+                                                        # If no active session found, skip this IMU sample
                                                         if not target_session_id:
-                        continue
+                                                            continue
 
                                                                 # CRITICAL: Only process IMU data for the MOST RECENT session
                                                                 # This prevents double counting when multiple sessions exist
@@ -381,70 +381,70 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 except Exception:
                                                                     pass
                                                             continue  # Skip processing this sample
-                    active_session_id = target_session_id
-                    active_session = target_session
+                                                        active_session_id = target_session_id
+                                                        active_session = target_session
 
-                                                                # Create IMU sample data from gymbud_imu_bridge format
-                    timestamp = data.get('timestamp', time.time())
-                    imu_sample_data = {
-                    'timestamp': timestamp,
-                    'rep_number': 0  # Will be updated after rep detection
-                    }
+                                                        # Create IMU sample data from gymbud_imu_bridge format
+                                                        timestamp = data.get('timestamp', time.time())
+                                                        imu_sample_data = {
+                                                            'timestamp': timestamp,
+                                                            'rep_number': 0  # Will be updated after rep detection
+                                                        }
 
-                                                                # Add each node's data (convert from nested to flat format)
-                    nodes_data = data.get('nodes', {})
+                                                        # Add each node's data (convert from nested to flat format)
+                                                        nodes_data = data.get('nodes', {})
                                                         if not isinstance(nodes_data, dict):
                                                             continue  # Skip if nodes is not a dict
                                                         
-                    for node_name in ['left_wrist', 'right_wrist', 'chest']:
+                                                        for node_name in ['left_wrist', 'right_wrist', 'chest']:
                                                             if node_name not in nodes_data:
                                                                 continue
-                        node_data = nodes_data[node_name]
+                                                            node_data = nodes_data[node_name]
                                                             if not isinstance(node_data, dict):
                                                                 continue
-                    accel = node_data.get('accel', {})
-                    gyro = node_data.get('gyro', {})
-                    quaternion = node_data.get('quaternion', {})
-                    euler = node_data.get('euler', {})
+                                                            accel = node_data.get('accel', {})
+                                                            gyro = node_data.get('gyro', {})
+                                                            quaternion = node_data.get('quaternion', {})
+                                                            euler = node_data.get('euler', {})
                                                             
                                                             # Ensure all are dicts
                                                             if not all(isinstance(x, dict) for x in [accel, gyro, quaternion, euler]):
                                                                 continue
                                                             
-                    imu_sample_data[node_name] = {
-                    'ax': accel.get('x'),
-                    'ay': accel.get('y'),
-                    'az': accel.get('z'),
-                    'gx': gyro.get('x'),
-                    'gy': gyro.get('y'),
-                    'gz': gyro.get('z'),
-                    'qw': quaternion.get('w'),
-                    'qx': quaternion.get('x'),
-                    'qy': quaternion.get('y'),
-                    'qz': quaternion.get('z'),
-                    'roll': euler.get('roll'),
-                    'pitch': euler.get('pitch'),
-                    'yaw': euler.get('yaw')
-                    }
+                                                            imu_sample_data[node_name] = {
+                                                                'ax': accel.get('x'),
+                                                                'ay': accel.get('y'),
+                                                                'az': accel.get('z'),
+                                                                'gx': gyro.get('x'),
+                                                                'gy': gyro.get('y'),
+                                                                'gz': gyro.get('z'),
+                                                                'qw': quaternion.get('w'),
+                                                                'qx': quaternion.get('x'),
+                                                                'qy': quaternion.get('y'),
+                                                                'qz': quaternion.get('z'),
+                                                                'roll': euler.get('roll'),
+                                                                'pitch': euler.get('pitch'),
+                                                                'yaw': euler.get('yaw')
+                                                            }
 
-                                                                # For IMU-only mode: Use IMUPeriodicRepDetector for rep detection
-                    fusion_mode = active_session.get('fusion_mode', 'camera_only')
+                                                        # For IMU-only mode: Use IMUPeriodicRepDetector for rep detection
+                                                        fusion_mode = active_session.get('fusion_mode', 'camera_only')
                                                         
                                                         # Skip processing if workout is complete (state is 'finished')
                                                         if active_session.get('state') == 'finished':
                                                             # Workout completed, skip rep detection
                                                             continue
                                                         
-                                                                    # Get IMU detector and collector
-                    imu_detector = active_session.get('imu_periodic_detector')
-                    imu_collector = imu_training_collectors.get(exercise) if IMU_DATASET_COLLECTION_ENABLED else None
+                                                        # Get IMU detector and collector
+                                                        imu_detector = active_session.get('imu_periodic_detector')
+                                                        imu_collector = imu_training_collectors.get(exercise) if IMU_DATASET_COLLECTION_ENABLED else None
                                                         
-                                                                        # Initialize rep buffer if needed
-                        if 'current_rep_imu_samples' not in active_session:
-                    active_session['current_rep_imu_samples'] = []
+                                                        # Initialize rep buffer if needed
+                                                        if 'current_rep_imu_samples' not in active_session:
+                                                            active_session['current_rep_imu_samples'] = []
 
-                                                                        # Add current sample to rep buffer BEFORE detection (so detector has enough data)
-                    active_session['current_rep_imu_samples'].append(copy.deepcopy(imu_sample_data))
+                                                        # Add current sample to rep buffer BEFORE detection (so detector has enough data)
+                                                        active_session['current_rep_imu_samples'].append(copy.deepcopy(imu_sample_data))
 
                                                                         # Add sample to detector
                                                         timestamp = imu_sample_data.get('timestamp', time.time())
@@ -457,10 +457,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                         reps_per_set = active_session.get('workout_config', {}).get('repsPerSet', 10)
                                                         number_of_sets = active_session.get('workout_config', {}).get('numberOfSets', 1)
 
-                                                                            # Rep detected!
+                                                        # Rep detected!
                                                         if rep_result and rep_result.get('rep', 0) > 0:
-                    rep_number = rep_result.get('rep', 0)
-                    print(f"✅ IMU Rep #{rep_number} detected in train mode (session: {active_session_id})!")
+                                                            rep_number = rep_result.get('rep', 0)
+                                                            print(f"✅ IMU Rep #{rep_number} detected in train mode (session: {active_session_id})!")
 
                                                             # Get form score from ensemble model (IMU-only mode)
                                                             # Ensemble model provides better form scoring based on pitch range, speed, and movement quality
@@ -515,10 +515,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
 
                                                             # Update session rep counts (increment, don't use detector's rep_number directly)
                                                             # Detector's rep_number is absolute count from detector start, but we need session-level count
-                    prev_total = active_session.get('total_reps_in_session', 0)
+                                                            prev_total = active_session.get('total_reps_in_session', 0)
                                                             # Always increment by 1 - detector may reset or give inconsistent numbers
                                                             active_session['total_reps_in_session'] = prev_total + 1
-                    active_session['collected_reps_count'] = active_session['total_reps_in_session']
+                                                            active_session['collected_reps_count'] = active_session['total_reps_in_session']
                                                         
                                                             # Store rep data with form score, regional scores, and speed
                                                             rep_data = {
@@ -538,10 +538,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 active_session['reps_data'] = []
                                                             active_session['reps_data'].append(rep_data)
 
-                                                                            # Update current_rep_in_set and current_set
-                    current_rep_in_set = active_session.get('current_rep_in_set', 0) + 1
-                    current_set = active_session.get('current_set', 1)
-                    reps_per_set = active_session.get('workout_config', {}).get('repsPerSet', 10)
+                                                            # Update current_rep_in_set and current_set
+                                                            current_rep_in_set = active_session.get('current_rep_in_set', 0) + 1
+                                                            current_set = active_session.get('current_set', 1)
+                                                            reps_per_set = active_session.get('workout_config', {}).get('repsPerSet', 10)
                                                             number_of_sets = active_session.get('workout_config', {}).get('numberOfSets', 1)
 
                                                             # Check if set is complete (before updating)
@@ -550,37 +550,37 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                             
                                                             if set_complete and not workout_complete:
                                                                 # Set complete but more sets to go
-                        current_set += 1
-                    current_rep_in_set = 0
+                                                                current_set += 1
+                                                                current_rep_in_set = 0
                                                             elif set_complete:
                                                                 # Last set complete - workout is complete (keep rep count for display)
                                                                 current_rep_in_set = reps_per_set  # Keep at max for display
                                                                 workout_complete = True  # Ensure workout_complete is True
                                                                 # Don't increment set - we're done
 
-                    active_session['current_rep_in_set'] = current_rep_in_set
-                    active_session['current_set'] = current_set
+                                                            active_session['current_rep_in_set'] = current_rep_in_set
+                                                            active_session['current_set'] = current_set
 
-                                                                            # Add current rep's IMU samples to collector (before resetting buffer)
+                                                            # Add current rep's IMU samples to collector (before resetting buffer)
                                                             if imu_collector and imu_collector.is_collecting:
-                    try:
-                                                                                    # Remove rep_number field before adding
-                    rep_imu_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in active_session['current_rep_imu_samples']]
-                    imu_collector.add_rep_sequence(
-                    rep_number=rep_number,
-                    imu_sequence=rep_imu_seq,
-                    rep_start_time=timestamp
-                    )
-                    print(f"📡 Added IMU rep #{rep_number} to training collector ({len(rep_imu_seq)} samples)")
-                    except Exception as e:
-                    print(f"⚠️  Failed to add IMU rep to collector: {e}")
+                                                                try:
+                                                                    # Remove rep_number field before adding
+                                                                    rep_imu_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in active_session['current_rep_imu_samples']]
+                                                                    imu_collector.add_rep_sequence(
+                                                                        rep_number=rep_number,
+                                                                        imu_sequence=rep_imu_seq,
+                                                                        rep_start_time=timestamp
+                                                                    )
+                                                                    print(f"📡 Added IMU rep #{rep_number} to training collector ({len(rep_imu_seq)} samples)")
+                                                                except Exception as e:
+                                                                    print(f"⚠️  Failed to add IMU rep to collector: {e}")
 
-                                                                            # Send update to frontend (with safe WebSocket check)
-                    session_websocket = active_session.get('websocket')
+                                                            # Send update to frontend (with safe WebSocket check)
+                                                            session_websocket = active_session.get('websocket')
                                                             if session_websocket:
-                    try:
-                                                                                    # Check WebSocket state safely
-                    ws_state = getattr(session_websocket, 'client_state', None)
+                                                                try:
+                                                                    # Check WebSocket state safely
+                                                                    ws_state = getattr(session_websocket, 'client_state', None)
                                                                     if ws_state and hasattr(ws_state, 'name') and ws_state.name == 'CONNECTED':
                                                                         # Get ensemble analysis from rep_result (speed, form, feedback, LW/RW)
                                                                         speed_emoji = rep_result.get('speed_emoji', '')
@@ -607,15 +607,15 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                         if rep_duration and rep_duration > 0:
                                                                             feedback_msg += f" ({rep_duration:.1f}s)"
                                                                         
-                        await session_websocket.send_json({
-                    'type': 'update',
+                                                                        await session_websocket.send_json({
+                                                                            'type': 'update',
                                                                             'rep_count': active_session['total_reps_in_session'],
-                    'current_set': current_set,
-                    'current_rep_in_set': current_rep_in_set,
-                    'reps_per_set': reps_per_set,
-                    'number_of_sets': active_session.get('workout_config', {}).get('numberOfSets', 3),
+                                                                            'current_set': current_set,
+                                                                            'current_rep_in_set': current_rep_in_set,
+                                                                            'reps_per_set': reps_per_set,
+                                                                            'number_of_sets': active_session.get('workout_config', {}).get('numberOfSets', 3),
                                                                             'feedback': feedback_msg,
-                    'angle': active_session.get('latest_angle', 0),
+                                                                            'angle': active_session.get('latest_angle', 0),
                                                                             'form_score': form_score,
                                                                             'avg_form': form_score,
                                                                             'phase': 'up',
@@ -649,10 +649,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                         lw_score = lw_data.get('score', '-') if lw_data else '-'
                                                                         rw_score = rw_data.get('score', '-') if rw_data else '-'
                                                                         print(f"📤 Sent rep #{active_session['total_reps_in_session']} update (form={form_score:.1f}%, LW={lw_score}, RW={rw_score}, speed={speed_label})")
-                    else:
+                                                                    else:
                                                                         # WebSocket is not connected, remove it from session
-                    active_session['websocket'] = None
-                    print(f"⚠️  WebSocket not connected for session {active_session_id}, removed from session")
+                                                                        active_session['websocket'] = None
+                                                                        print(f"⚠️  WebSocket not connected for session {active_session_id}, removed from session")
                                                                 except AttributeError:
                                                                     # Try alternative method to check connection
                                                                     try:
@@ -702,10 +702,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                     except Exception:
                                                                         active_session['websocket'] = None
                                                                         print(f"⚠️  Failed to send rep update, removed websocket from session")
-                    except (RuntimeError, WebSocketDisconnect, AttributeError) as e:
-                                                                                    # WebSocket is closed, remove it from session
-                    active_session['websocket'] = None
-                    print(f"⚠️  Failed to send rep update to frontend (WebSocket closed): {e}")
+                                                                except (RuntimeError, WebSocketDisconnect, AttributeError) as e:
+                                                                    # WebSocket is closed, remove it from session
+                                                                    active_session['websocket'] = None
+                                                                    print(f"⚠️  Failed to send rep update to frontend (WebSocket closed): {e}")
 
                                                             # Send AI feedback for completed rep (IMU-only mode)
                                                             if openai_client:
@@ -753,11 +753,11 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 except Exception as e:
                                                                     print(f"⚠️  Failed to send AI feedback: {e}")
 
-                                                                            # Reset rep buffer for next rep
-                    active_session['current_rep_imu_samples'] = []
+                                                            # Reset rep buffer for next rep
+                                                            active_session['current_rep_imu_samples'] = []
 
-                                                                            # Update rep number in imu_sample_data for session-level collection
-                    imu_sample_data['rep_number'] = rep_number
+                                                            # Update rep number in imu_sample_data for session-level collection
+                                                            imu_sample_data['rep_number'] = rep_number
                                                         
                                                         # Check if workout is complete (all sets done) - IMU-only mode
                                                         # IMPORTANT: Check this AFTER all rep processing to ensure session summary is sent
@@ -889,142 +889,142 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 except (RuntimeError, WebSocketDisconnect, AttributeError):
                                                                     pass
 
-                                                                # Add to session-level buffer (continuous collection)
+                                                        # Add to session-level buffer (continuous collection)
                                                         if 'session_imu_samples' not in active_session:
-                        active_session['session_imu_samples'] = []
-                    active_session['session_imu_samples'].append(copy.deepcopy(imu_sample_data))
+                                                            active_session['session_imu_samples'] = []
+                                                        active_session['session_imu_samples'].append(copy.deepcopy(imu_sample_data))
                                                         
-                    continue
-                    except Exception as e:
-                    print(f"⚠️  Error processing IMU data from gymbud_imu_bridge: {e}")
-                    except websockets.exceptions.ConnectionClosedOK:
-                    print(f"🔌 Disconnected from gymbud_imu_bridge WebSocket for {exercise}. Reconnecting...")
-                    await asyncio.sleep(1)
-                    except Exception as e:
-                    print(f"❌ Failed to connect to gymbud_imu_bridge WebSocket for {exercise}: {e}. Retrying in 1 second...")
-                    await asyncio.sleep(1)
+                                                        continue
+                                                    except Exception as e:
+                                                        print(f"⚠️  Error processing IMU data from gymbud_imu_bridge: {e}")
+                                        except websockets.exceptions.ConnectionClosedOK:
+                                            print(f"🔌 Disconnected from gymbud_imu_bridge WebSocket for {exercise}. Reconnecting...")
+                                            await asyncio.sleep(1)
+                                        except Exception as e:
+                                            print(f"❌ Failed to connect to gymbud_imu_bridge WebSocket for {exercise}: {e}. Retrying in 1 second...")
+                                            await asyncio.sleep(1)
 
-                                    # Start the WebSocket client task (exercise-level, not session-level)
-                    task = asyncio.create_task(imu_bridge_client_task())
-                    imu_bridge_tasks[exercise] = task
-                    print(f"🚀 Started IMU bridge WebSocket client task for {exercise} (shared across all sessions)")
-                    else:
-                    print(f"ℹ️  IMU bridge task already running for {exercise}, reusing existing task")
+                                # Start the WebSocket client task (exercise-level, not session-level)
+                                task = asyncio.create_task(imu_bridge_client_task())
+                                imu_bridge_tasks[exercise] = task
+                                print(f"🚀 Started IMU bridge WebSocket client task for {exercise} (shared across all sessions)")
+                            else:
+                                print(f"ℹ️  IMU bridge task already running for {exercise}, reusing existing task")
 
-                    session['training_session_started'] = True
+                        session['training_session_started'] = True
                         # Initialize session-level buffers for continuous data collection (rep sayılsın ya da sayılmasın)
-                    session['session_landmarks'] = []  # All landmarks throughout session
-                    session['session_imu_samples'] = []  # All IMU samples throughout session
-                    session['session_start_time'] = time.time()
+                        session['session_landmarks'] = []  # All landmarks throughout session
+                        session['session_imu_samples'] = []  # All IMU samples throughout session
+                        session['session_start_time'] = time.time()
                         # Initialize rep-level buffers (will be reset after each rep is saved)
-                    session['current_rep_landmarks'] = []  # Current rep's landmarks
-                    session['current_rep_imu_samples'] = []  # Current rep's IMU samples
-                    print(f"📊 Mode: {ml_mode} (ML Training mode - synchronized camera & IMU collection enabled for {exercise})")
-                    print(f"   Shared session ID: {shared_session_id}")
-                    print(f"   Session-level continuous collection enabled (all data, regardless of rep counting)")
+                        session['current_rep_landmarks'] = []  # Current rep's landmarks
+                        session['current_rep_imu_samples'] = []  # Current rep's IMU samples
+                        print(f"📊 Mode: {ml_mode} (ML Training mode - synchronized camera & IMU collection enabled for {exercise})")
+                        print(f"   Shared session ID: {shared_session_id}")
+                        print(f"   Session-level continuous collection enabled (all data, regardless of rep counting)")
 
-                # Store workout configuration
-                workout_config = data.get('workout_config', {})
-                if workout_config:
-                    session['workout_config'] = {
-                    'numberOfSets': workout_config.get('numberOfSets', 3),
-                    'repsPerSet': workout_config.get('repsPerSet', 10),
-                    'restTimeSeconds': workout_config.get('restTimeSeconds', 60)
-                    }
-                    session['current_set'] = 1
-                    session['current_rep_in_set'] = 0
-                    session['total_reps_in_session'] = 0
+                    # Store workout configuration
+                    workout_config = data.get('workout_config', {})
+                    if workout_config:
+                        session['workout_config'] = {
+                            'numberOfSets': workout_config.get('numberOfSets', 3),
+                            'repsPerSet': workout_config.get('repsPerSet', 10),
+                            'restTimeSeconds': workout_config.get('restTimeSeconds', 60)
+                        }
+                        session['current_set'] = 1
+                        session['current_rep_in_set'] = 0
+                        session['total_reps_in_session'] = 0
 
-                # Only send 'ready' if not in IMU-only mode (already sent state message above)
-                if session and session.get('fusion_mode') != 'imu_only':
-                    try:
-                        await websocket.send_json({'type': 'ready'})
-                    except (RuntimeError, WebSocketDisconnect, AttributeError):
-                    pass
-                continue
+                    # Only send 'ready' if not in IMU-only mode (already sent state message above)
+                    if session and session.get('fusion_mode') != 'imu_only':
+                        try:
+                            await websocket.send_json({'type': 'ready'})
+                        except (RuntimeError, WebSocketDisconnect, AttributeError):
+                            pass
+                    continue
             
             # Handle dataset collection start/stop
             if data.get('type') == 'start_collection':
-                    try:
-                user_id = data.get('user_id', 'default')
+                try:
+                    user_id = data.get('user_id', 'default')
                     if dataset_collector:
-                dataset_collector.start_session(exercise, user_id=user_id)
-                session['dataset_collection_enabled'] = True
-                session['collected_reps_count'] = 0
-                try:
-                    await websocket.send_json({
-                'type': 'dataset_collection_status',
-                'status': 'collecting',
-                'collected_reps': 0
-                })
-                except (RuntimeError, WebSocketDisconnect, AttributeError):
-                pass
-                print(f"✅ Dataset collection started for {exercise}")
+                        dataset_collector.start_session(exercise, user_id=user_id)
+                        session['dataset_collection_enabled'] = True
+                        session['collected_reps_count'] = 0
+                        try:
+                            await websocket.send_json({
+                                'type': 'dataset_collection_status',
+                                'status': 'collecting',
+                                'collected_reps': 0
+                            })
+                        except (RuntimeError, WebSocketDisconnect, AttributeError):
+                            pass
+                        print(f"✅ Dataset collection started for {exercise}")
                 except Exception as e:
-                print(f"⚠️  Failed to start dataset collection: {e}")
-                try:
-                    await websocket.send_json({
-                'type': 'dataset_collection_status',
-                'status': 'error',
-                'error': str(e)
-                })
-                except (RuntimeError, WebSocketDisconnect, AttributeError):
-                pass
+                    print(f"⚠️  Failed to start dataset collection: {e}")
+                    try:
+                        await websocket.send_json({
+                            'type': 'dataset_collection_status',
+                            'status': 'error',
+                            'error': str(e)
+                        })
+                    except (RuntimeError, WebSocketDisconnect, AttributeError):
+                        pass
                 else:
-                try:
-                    await websocket.send_json({
-                'type': 'dataset_collection_status',
-                'status': 'error',
-                'error': 'Dataset collector not available'
-                })
-                except (RuntimeError, WebSocketDisconnect, AttributeError):
-                pass
+                    try:
+                        await websocket.send_json({
+                            'type': 'dataset_collection_status',
+                            'status': 'error',
+                            'error': 'Dataset collector not available'
+                        })
+                    except (RuntimeError, WebSocketDisconnect, AttributeError):
+                        pass
                 continue
 
             if data.get('type') == 'stop_collection':
                 try:
-                        # Save current session
+                    # Save current session
                     auto_label = data.get('auto_label_perfect', True)
                     if dataset_collector:
-                dataset_collector.save_session(auto_label_perfect=auto_label)
-                collected_count = session.get('collected_reps_count', 0)
-                session['dataset_collection_enabled'] = False
+                        dataset_collector.save_session(auto_label_perfect=auto_label)
+                        collected_count = session.get('collected_reps_count', 0)
+                        session['dataset_collection_enabled'] = False
 
-                            # Safely send status update
-                try:
-                    await websocket.send_json({
-                'type': 'dataset_collection_status',
-                'status': 'saved',
-                'collected_reps': collected_count,
-                'message': f'Dataset saved: {collected_count} reps collected'
-                })
-                except (RuntimeError, WebSocketDisconnect, AttributeError):
-                                # WebSocket closed, silently ignore
-                pass
-                print(f"💾 Dataset saved: {collected_count} reps")
-                else:
-                            # Safely send idle status
-                try:
-                    await websocket.send_json({
-                'type': 'dataset_collection_status',
-                'status': 'idle',
-                'collected_reps': 0
-                })
-                except (RuntimeError, WebSocketDisconnect, AttributeError):
-                                # WebSocket closed, silently ignore
-                pass
-                except Exception as e:
-                print(f"⚠️  Failed to stop/save dataset collection: {e}")
-                        # Safely send error status
-                try:
-                    await websocket.send_json({
-                'type': 'dataset_collection_status',
-                'status': 'error',
-                'error': str(e)
-                })
-                except (RuntimeError, WebSocketDisconnect, AttributeError):
+                        # Safely send status update
+                        try:
+                            await websocket.send_json({
+                                'type': 'dataset_collection_status',
+                                'status': 'saved',
+                                'collected_reps': collected_count,
+                                'message': f'Dataset saved: {collected_count} reps collected'
+                            })
+                        except (RuntimeError, WebSocketDisconnect, AttributeError):
                             # WebSocket closed, silently ignore
-                pass
+                            pass
+                        print(f"💾 Dataset saved: {collected_count} reps")
+                    else:
+                        # Safely send idle status
+                        try:
+                            await websocket.send_json({
+                                'type': 'dataset_collection_status',
+                                'status': 'idle',
+                                'collected_reps': 0
+                            })
+                        except (RuntimeError, WebSocketDisconnect, AttributeError):
+                            # WebSocket closed, silently ignore
+                            pass
+                except Exception as e:
+                    print(f"⚠️  Failed to stop/save dataset collection: {e}")
+                    # Safely send error status
+                    try:
+                        await websocket.send_json({
+                            'type': 'dataset_collection_status',
+                            'status': 'error',
+                            'error': str(e)
+                        })
+                    except (RuntimeError, WebSocketDisconnect, AttributeError):
+                        # WebSocket closed, silently ignore
+                        pass
                 continue
 
             if data.get('type') == 'pose':
@@ -1152,22 +1152,22 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 frame_rep_number = 0
                                 if rep_counter.phase == 'up':
                                     # Rep is in progress, rep number is the next rep (will be completed)
-                            frame_rep_number = rep_counter.count + 1
+                                    frame_rep_number = rep_counter.count + 1
 
                                 # Add to rep-level buffer (for rep-based collection)
-                            session['current_rep_landmarks'].append(landmarks)
+                                session['current_rep_landmarks'].append(landmarks)
                                 
                                 # Also add to session-level buffer (for continuous collection) with rep_number
                                 if 'session_landmarks' not in session:
-                                session['session_landmarks'] = []
-                            session['session_landmarks'].append({
-                            'timestamp': current_time,
-                            'landmarks': landmarks,
-                            'rep_number': frame_rep_number  # Mark which rep this frame belongs to
-                            })
-                            session['last_camera_sample_time'] = current_time
-                            if len(session['current_rep_landmarks']) > 200:  # Increased for longer reps at 20Hz
-                            session['current_rep_landmarks'].pop(0)
+                                    session['session_landmarks'] = []
+                                session['session_landmarks'].append({
+                                    'timestamp': current_time,
+                                    'landmarks': landmarks,
+                                    'rep_number': frame_rep_number  # Mark which rep this frame belongs to
+                                })
+                                session['last_camera_sample_time'] = current_time
+                                if len(session['current_rep_landmarks']) > 200:  # Increased for longer reps at 20Hz
+                                    session['current_rep_landmarks'].pop(0)
 
                         # In train mode, IMU data comes from gymbud_imu_bridge WebSocket client (bypass frontend throttling)
                         # Skip frontend IMU data processing in train mode
@@ -1185,7 +1185,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         if imu_data:
                             # Check each IMU node separately for 20Hz throttling
                             if 'last_imu_node_sample_time' not in session:
-                            session['last_imu_node_sample_time'] = {}
+                                session['last_imu_node_sample_time'] = {}
                             
                             nodes_to_add = {}
                             for node_name in ['left_wrist', 'right_wrist', 'chest']:
@@ -1193,21 +1193,21 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     continue
                                 last_node_time = session['last_imu_node_sample_time'].get(node_name)
                                 if last_node_time is None or (current_time - last_node_time) >= 0.05:
-                                nodes_to_add[node_name] = imu_data[node_name]
-                            session['last_imu_node_sample_time'][node_name] = current_time
+                                    nodes_to_add[node_name] = imu_data[node_name]
+                                    session['last_imu_node_sample_time'][node_name] = current_time
 
                             if nodes_to_add:
                                 throttled_imu_data = {k: v for k, v in nodes_to_add.items()}
                                 if 'timestamp' in imu_data:
-                                throttled_imu_data['timestamp'] = imu_data['timestamp']
+                                    throttled_imu_data['timestamp'] = imu_data['timestamp']
                                 else:
                                     throttled_imu_data['timestamp'] = current_time
                                 
                                 if 'current_rep_imu' not in session:
                                     session['current_rep_imu'] = []
-                            session['current_rep_imu'].append(throttled_imu_data)
+                                session['current_rep_imu'].append(throttled_imu_data)
                                 if len(session['current_rep_imu']) > 200:  # Limit buffer size
-                            session['current_rep_imu'].pop(0)
+                                    session['current_rep_imu'].pop(0)
 
                     # Calculate angle
                     config = EXERCISE_CONFIG.get(exercise, {})
@@ -1223,7 +1223,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         # Validate angle is reasonable (0-180°)
                         if angle < 0 or angle > 180 or np.isnan(angle):
                             angle = 0
-                            except (IndexError, KeyError, TypeError) as e:
+                    except (IndexError, KeyError, TypeError) as e:
                         print(f"⚠️ Angle calculation error: {e}")
                         angle = 0
                     
@@ -1274,55 +1274,55 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         if ml_inference and ml_inference.has_camera_model():
                             try:
                                 # Get landmarks sequence for current rep
-                            rep_landmarks = session.get('current_rep_landmarks', [])
-                                    # Predict using ML model (returns Dict[str, float] with regional scores)
-                            ml_prediction = ml_inference.predict_camera(rep_landmarks)
+                                rep_landmarks = session.get('current_rep_landmarks', [])
+                                # Predict using ML model (returns Dict[str, float] with regional scores)
+                                ml_prediction = ml_inference.predict_camera(rep_landmarks)
 
-                                    # Extract regional scores from ML prediction
+                                # Extract regional scores from ML prediction
                                 ml_regional_scores = {
-                            'arms': ml_prediction.get('arms', 0.0),
-                            'legs': ml_prediction.get('legs', 0.0),
-                            'core': ml_prediction.get('core', 0.0),
-                            'head': ml_prediction.get('head', 0.0)
-                            }
+                                    'arms': ml_prediction.get('arms', 0.0),
+                                    'legs': ml_prediction.get('legs', 0.0),
+                                    'core': ml_prediction.get('core', 0.0),
+                                    'head': ml_prediction.get('head', 0.0)
+                                }
 
-                                    # Calculate baseline similarity (regional) if baselines are available
-                            baselines = session.get('baselines', {})
-                                        # Use regional scores for similarity calculation
-                            baseline_similarity_dict, _ = calculate_baseline_similarity(
-                            current_features=None,
-                            baselines=baselines,
-                            current_regional_scores=ml_regional_scores
-                            )
-                            baseline_similarity = baseline_similarity_dict  # Dict[str, float] with regional similarities
+                                # Calculate baseline similarity (regional) if baselines are available
+                                baselines = session.get('baselines', {})
+                                # Use regional scores for similarity calculation
+                                baseline_similarity_dict, _ = calculate_baseline_similarity(
+                                    current_features=None,
+                                    baselines=baselines,
+                                    current_regional_scores=ml_regional_scores
+                                )
+                                baseline_similarity = baseline_similarity_dict  # Dict[str, float] with regional similarities
 
-                                        # Calculate hybrid score (ML + Baseline) - regional
-                            hybrid_score = calculate_hybrid_correction_score(
-                            ml_prediction,
-                            baseline_similarity,
-                            ml_weight=0.6,
-                            baseline_weight=0.4
-                            )
+                                # Calculate hybrid score (ML + Baseline) - regional
+                                hybrid_score = calculate_hybrid_correction_score(
+                                    ml_prediction,
+                                    baseline_similarity,
+                                    ml_weight=0.6,
+                                    baseline_weight=0.4
+                                )
 
-                                        # Use hybrid_score as final regional scores (ML + Baseline)
+                                # Use hybrid_score as final regional scores (ML + Baseline)
                                 if hybrid_score:
-                                rep_result['regional_scores'] = hybrid_score
-                            elif ml_regional_scores:
-                                        # ML prediction available but no baselines - use ML prediction
-                            rep_result['regional_scores'] = ml_regional_scores
-                            else:
-                                        # Fallback to rule-based
-                            rep_result['regional_scores'] = rule_based_regional_scores
+                                    rep_result['regional_scores'] = hybrid_score
+                                elif ml_regional_scores:
+                                    # ML prediction available but no baselines - use ML prediction
+                                    rep_result['regional_scores'] = ml_regional_scores
+                                else:
+                                    # Fallback to rule-based
+                                    rep_result['regional_scores'] = rule_based_regional_scores
 
                                 print(f"🤖 ML Regional Scores: Arms={ml_regional_scores['arms']:.1f}%, Legs={ml_regional_scores['legs']:.1f}%, Core={ml_regional_scores['core']:.1f}%, Head={ml_regional_scores['head']:.1f}%")
                                 print(f"   Baseline Similarity: Arms={baseline_similarity.get('arms', 0):.1f}%, Legs={baseline_similarity.get('legs', 0):.1f}%, Core={baseline_similarity.get('core', 0):.1f}%, Head={baseline_similarity.get('head', 0):.1f}%")
                                 print(f"   Hybrid Scores: Arms={hybrid_score.get('arms', 0):.1f}%, Legs={hybrid_score.get('legs', 0):.1f}%, Core={hybrid_score.get('core', 0):.1f}%, Head={hybrid_score.get('head', 0):.1f}%")
                             except Exception as e:
-                            print(f"⚠️  ML inference error: {e}")
-                            import traceback
-                            traceback.print_exc()
+                                print(f"⚠️  ML inference error: {e}")
+                                import traceback
+                                traceback.print_exc()
                                 # Fallback to rule-based
-                            rep_result['regional_scores'] = rule_based_regional_scores
+                                rep_result['regional_scores'] = rule_based_regional_scores
                         else:
                             # ML not available - use rule-based regional scores
                             rep_result['regional_scores'] = rule_based_regional_scores
@@ -1345,22 +1345,22 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             camera_rep_timestamp = None
                             if camera_collector and camera_collector.is_collecting:
                                 try:
-                                camera_rep_sample = camera_collector.add_rep_sample(
-                                exercise=exercise,
-                                rep_number=rep_number,
-                                landmarks_sequence=session['current_rep_landmarks'].copy(),
-                                imu_sequence=None,  # Don't save IMU in camera collector
-                                regional_scores=form_result.get('regional_scores'),
-                                regional_issues=form_result.get('regional_issues'),
-                                min_angle=rep_result.get('min_angle'),
-                                max_angle=rep_result.get('max_angle'),
-                                user_id='default'
-                                )
+                                    camera_rep_sample = camera_collector.add_rep_sample(
+                                        exercise=exercise,
+                                        rep_number=rep_number,
+                                        landmarks_sequence=session['current_rep_landmarks'].copy(),
+                                        imu_sequence=None,  # Don't save IMU in camera collector
+                                        regional_scores=form_result.get('regional_scores'),
+                                        regional_issues=form_result.get('regional_issues'),
+                                        min_angle=rep_result.get('min_angle'),
+                                        max_angle=rep_result.get('max_angle'),
+                                        user_id='default'
+                                    )
                                     # Use the camera rep sample's timestamp (more accurate, matches camera data)
-                                camera_rep_timestamp = camera_rep_sample.timestamp
-                                print(f"📹 Saved rep #{rep_number} to MLTRAINCAMERA/{exercise}/ (timestamp: {camera_rep_timestamp})")
+                                    camera_rep_timestamp = camera_rep_sample.timestamp
+                                    print(f"📹 Saved rep #{rep_number} to MLTRAINCAMERA/{exercise}/ (timestamp: {camera_rep_timestamp})")
                                 except Exception as e:
-                                print(f"⚠️  Camera training collection error: {e}")
+                                    print(f"⚠️  Camera training collection error: {e}")
 
                             # Save to IMU training collector (exercise-specific)
                             # Use camera rep timestamp to ensure synchronization
@@ -1368,41 +1368,41 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             if imu_collector and imu_collector.is_collecting and camera_rep_timestamp:
                                 try:
                                     # Get IMU samples from session
-                                imu_samples_seq = session.get('current_rep_imu_samples', [])
+                                    imu_samples_seq = session.get('current_rep_imu_samples', [])
 
-                                        # Remove rep_number from samples before adding to collector
+                                    # Remove rep_number from samples before adding to collector
                                     imu_data_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in imu_samples_seq]
                                     
                                     if imu_data_seq:
-                                imu_collector.add_rep_sequence(
-                                rep_number=rep_number,
-                                imu_sequence=imu_data_seq,
-                                rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
-                                )
-                                print(f"📡 Saved rep #{rep_number} to MLTRAINIMU/{exercise}/ ({len(imu_data_seq)} IMU samples from gymbud_imu_bridge)")
-                                else:
+                                        imu_collector.add_rep_sequence(
+                                            rep_number=rep_number,
+                                            imu_sequence=imu_data_seq,
+                                            rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
+                                        )
+                                        print(f"📡 Saved rep #{rep_number} to MLTRAINIMU/{exercise}/ ({len(imu_data_seq)} IMU samples from gymbud_imu_bridge)")
+                                    else:
                                         # Use session-level IMU data if rep-level is empty (fallback)
-                                session_imu_samples = session.get('session_imu_samples', [])
+                                        session_imu_samples = session.get('session_imu_samples', [])
                                         # Filter session-level samples by rep_number
-                                rep_imu_samples = [s for s in session_imu_samples if s.get('rep_number') == rep_number]
-                                            # Extract IMU data from session-level samples (remove rep_number field for consistency)
-                                    rep_imu_data = [{k: v for k, v in s.items() if k != 'rep_number'} for s in rep_imu_samples]
+                                        rep_imu_samples = [s for s in session_imu_samples if s.get('rep_number') == rep_number]
+                                        # Extract IMU data from session-level samples (remove rep_number field for consistency)
+                                        rep_imu_data = [{k: v for k, v in s.items() if k != 'rep_number'} for s in rep_imu_samples]
                                         
                                         if rep_imu_data:
-                                imu_collector.add_rep_sequence(
-                                rep_number=rep_number,
-                                imu_sequence=rep_imu_data,
-                                rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
-                                )
-                                print(f"📡 Saved rep #{rep_number} to MLTRAINIMU/{exercise}/ ({len(rep_imu_data)} IMU samples from session-level data)")
-                                else:
-                                print(f"⚠️  Rep #{rep_number}: No IMU samples found")
+                                            imu_collector.add_rep_sequence(
+                                                rep_number=rep_number,
+                                                imu_sequence=rep_imu_data,
+                                                rep_start_time=camera_rep_timestamp  # Use camera rep timestamp for synchronization
+                                            )
+                                            print(f"📡 Saved rep #{rep_number} to MLTRAINIMU/{exercise}/ ({len(rep_imu_data)} IMU samples from session-level data)")
+                                        else:
+                                            print(f"⚠️  Rep #{rep_number}: No IMU samples found")
                                     # Clear rep-level buffer after saving
-                                session['current_rep_imu_samples'] = []
+                                    session['current_rep_imu_samples'] = []
                                 except Exception as e:
-                                print(f"⚠️  IMU training collection error: {e}")
-                                import traceback
-                                traceback.print_exc()
+                                    print(f"⚠️  IMU training collection error: {e}")
+                                    import traceback
+                                    traceback.print_exc()
 
                             # Update collected reps count
                             session['collected_reps_count'] = session.get('collected_reps_count', 0) + 1
@@ -1532,38 +1532,38 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     all_regional_scores = [r.get('regional_scores', {}) for r in session['reps_data'] if r.get('regional_scores')]
                                     if all_regional_scores:
                                         avg_regional_scores = {
-                                            'arms': sum(r.get('arms', 0) for r in all_regional_scores) / len(all_regional_scores),
-                                            'legs': sum(r.get('legs', 0) for r in all_regional_scores) / len(all_regional_scores),
-                                            'core': sum(r.get('core', 0) for r in all_regional_scores) / len(all_regional_scores),
-                                            'head': sum(r.get('head', 0) for r in all_regional_scores) / len(all_regional_scores),
-                                        }
-                                    else:
-                                        avg_regional_scores = {'arms': 0, 'legs': 0, 'core': 0, 'head': 0}
+                                    'arms': sum(r.get('arms', 0) for r in all_regional_scores) / len(all_regional_scores),
+                                    'legs': sum(r.get('legs', 0) for r in all_regional_scores) / len(all_regional_scores),
+                                    'core': sum(r.get('core', 0) for r in all_regional_scores) / len(all_regional_scores),
+                                    'head': sum(r.get('head', 0) for r in all_regional_scores) / len(all_regional_scores),
+                                }
                                 else:
                                     avg_regional_scores = {'arms': 0, 'legs': 0, 'core': 0, 'head': 0}
+                            else:
+                                avg_regional_scores = {'arms': 0, 'legs': 0, 'core': 0, 'head': 0}
                                 
-                                # Generate regional feedbacks based on average regional scores
-                                # Collect all regional issues from all reps
-                                all_regional_issues = {}
-                                for rep_data in session.get('reps_data', []):
-                                    regional_issues = rep_data.get('regional_issues', {})
-                                    for region in ['arms', 'legs', 'core', 'head']:
-                                        if region not in all_regional_issues:
-                                            all_regional_issues[region] = []
-                                        if regional_issues.get(region):
-                                            all_regional_issues[region].extend(regional_issues[region])
-
-                                # Get most common issue per region
-                                regional_issues_summary = {}
+                            # Generate regional feedbacks based on average regional scores
+                            # Collect all regional issues from all reps
+                            all_regional_issues = {}
+                            for rep_data in session.get('reps_data', []):
+                                regional_issues = rep_data.get('regional_issues', {})
                                 for region in ['arms', 'legs', 'core', 'head']:
-                                    if all_regional_issues.get(region):
-                                        issue_counts = {}
-                                        for issue in all_regional_issues[region]:
+                                    if region not in all_regional_issues:
+                                        all_regional_issues[region] = []
+                                    if regional_issues.get(region):
+                                        all_regional_issues[region].extend(regional_issues[region])
+
+                            # Get most common issue per region
+                            regional_issues_summary = {}
+                            for region in ['arms', 'legs', 'core', 'head']:
+                                if all_regional_issues.get(region):
+                                    issue_counts = {}
+                                    for issue in all_regional_issues[region]:
                                         issue_counts[issue] = issue_counts.get(issue, 0) + 1
-                                        top_issue = max(issue_counts.items(), key=lambda x: x[1])[0] if issue_counts else None
-                                        regional_issues_summary[region] = [top_issue] if top_issue else []
-                                    else:
-                                        regional_issues_summary[region] = []
+                                    top_issue = max(issue_counts.items(), key=lambda x: x[1])[0] if issue_counts else None
+                                    regional_issues_summary[region] = [top_issue] if top_issue else []
+                                else:
+                                    regional_issues_summary[region] = []
                                 
                                 # Generate regional feedback using rule-based feedback
                                 regional_feedbacks = {}
@@ -1624,12 +1624,12 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     print(f"   Camera collector: {camera_samples} rep samples + {session_landmarks_count} session frames")
                                     print(f"   IMU collector: {imu_samples} rep sequences + {session_imu_count} session samples")
 
-                                # Send final rep update
-                                try:
-                                    if websocket.client_state.name == 'CONNECTED':
-                                        await websocket.send_json(response)
-                                        except (RuntimeError, WebSocketDisconnect, AttributeError):
-                                    pass
+                            # Send final rep update
+                            try:
+                                if websocket.client_state.name == 'CONNECTED':
+                                    await websocket.send_json(response)
+                            except (RuntimeError, WebSocketDisconnect, AttributeError):
+                                pass
                                 
                                 # Send session summary
                                 try:
@@ -1687,9 +1687,9 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             if has_camera and has_imu:
                                 fusion_mode = 'camera_primary'  # Sensor fusion
                             elif has_imu:
-                            fusion_mode = 'imu_only'
+                                fusion_mode = 'imu_only'
                             elif has_camera:
-                            fusion_mode = 'camera_only'
+                                fusion_mode = 'camera_only'
 
                         # Get last landmark frame (for landmark-based feedback)
                         last_landmarks = None
@@ -1709,10 +1709,10 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             rep_imu_samples = session.get('current_rep_imu', [])
                             if rep_imu_samples:
                                 # Get last IMU sample (remove rep_number field)
-                            last_imu_sample = rep_imu_samples[-1].copy()
-                            last_imu_sample.pop('rep_number', None)
-                            last_imu_sample.pop('timestamp', None)
-                            imu_data_for_feedback = last_imu_sample
+                                last_imu_sample = rep_imu_samples[-1].copy()
+                                last_imu_sample.pop('rep_number', None)
+                                last_imu_sample.pop('timestamp', None)
+                                imu_data_for_feedback = last_imu_sample
 
                         asyncio.create_task(
                             send_ai_feedback_async(
@@ -1752,16 +1752,16 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                 if dataset_collector and DATASET_COLLECTION_ENABLED:
                     auto_label = data.get('auto_label_perfect', False)
                     try:
-                    dataset_collector.save_session(auto_label_perfect=auto_label)
-                    await websocket.send_json({
-                    'type': 'dataset_saved',
-                    'message': 'Dataset session saved successfully'
-                    })
+                        dataset_collector.save_session(auto_label_perfect=auto_label)
+                        await websocket.send_json({
+                            'type': 'dataset_saved',
+                            'message': 'Dataset session saved successfully'
+                        })
                     except Exception as e:
-                    await websocket.send_json({
-                    'type': 'dataset_error',
-                    'error': str(e)
-                    })
+                        await websocket.send_json({
+                            'type': 'dataset_error',
+                            'error': str(e)
+                        })
                 else:
                     await websocket.send_json({
                         'type': 'dataset_error',
@@ -1775,31 +1775,31 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                     ml_mode = session.get('ml_mode', 'usage')
                     collected_count = session.get('collected_reps_count', 0)
                     
-                        # Training mode: save both camera and IMU datasets (but don't mark as used yet)
+                    # Training mode: save both camera and IMU datasets (but don't mark as used yet)
                     if ml_mode == 'train':
-                            # Save session-level continuous data (all data throughout session, rep sayılsın ya da sayılmasın)
-                                camera_collector = camera_training_collectors.get(exercise)
-                            imu_collector = imu_training_collectors.get(exercise)
-                            
-                            # Add session-level continuous data as rep_number=0 (before saving)
-                            session_landmarks = session.get('session_landmarks', [])
-                            session_imu_samples = session.get('session_imu_samples', [])
-                            session_start_time = session.get('session_start_time', time.time())
-                            
-                                # Extract landmarks from session buffer (they're stored as {'timestamp': ..., 'landmarks': ...})
+                        # Save session-level continuous data (all data throughout session, rep sayılsın ya da sayılmasın)
+                        camera_collector = camera_training_collectors.get(exercise)
+                        imu_collector = imu_training_collectors.get(exercise)
+                        
+                        # Add session-level continuous data as rep_number=0 (before saving)
+                        session_landmarks = session.get('session_landmarks', [])
+                        session_imu_samples = session.get('session_imu_samples', [])
+                        session_start_time = session.get('session_start_time', time.time())
+                        
+                        # Extract landmarks from session buffer (they're stored as {'timestamp': ..., 'landmarks': ...})
                         landmarks_sequence = [item['landmarks'] for item in session_landmarks]
                         
                         if camera_collector and camera_collector.is_collecting and len(landmarks_sequence) > 0:
-                                try:
+                            try:
                                 camera_collector.add_rep_sample(
-                                exercise=exercise,
-                                rep_number=0,  # rep_number=0 means session-level continuous data
-                                landmarks_sequence=landmarks_sequence,
-                                imu_sequence=None,
-                                user_id='default'
+                                    exercise=exercise,
+                                    rep_number=0,  # rep_number=0 means session-level continuous data
+                                    landmarks_sequence=landmarks_sequence,
+                                    imu_sequence=None,
+                                    user_id='default'
                                 )
                                 print(f"📹 Added session-level continuous camera data: {len(landmarks_sequence)} frames (rep_number=0)")
-                                except Exception as e:
+                            except Exception as e:
                                 print(f"⚠️  Failed to add session-level camera data: {e}")
 
                             if imu_collector and imu_collector.is_collecting:
@@ -1914,7 +1914,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         if all_regional_issues.get(region):
                             issue_counts = {}
                             for issue in all_regional_issues[region]:
-                            issue_counts[issue] = issue_counts.get(issue, 0) + 1
+                                issue_counts[issue] = issue_counts.get(issue, 0) + 1
                             top_issue = max(issue_counts.items(), key=lambda x: x[1])[0] if issue_counts else None
                             regional_issues_summary[region] = [top_issue] if top_issue else []
                         else:
@@ -1928,7 +1928,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         regional_feedbacks[region] = get_rule_based_regional_feedback(
                             exercise, region, region_score, region_issues,
                             rep_num=len(session['reps_data']), min_angle=None, max_angle=None
-                    )
+                        )
                     
                     # Use total_reps_in_session for IMU-only mode (reps_data may be empty)
                     total_reps = session.get('total_reps_in_session', len(session.get('reps_data', [])))
@@ -1958,7 +1958,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         if websocket.client_state.name == 'CONNECTED':
                             await websocket.send_json(summary_data)
                             print(f"📤 Sent automatic session_summary: total_reps={summary_data['total_reps']}, workout_complete=True")
-                            except (RuntimeError, WebSocketDisconnect, AttributeError):
+                    except (RuntimeError, WebSocketDisconnect, AttributeError):
                         pass
             
             # Handle training action (from dialog)
@@ -1982,103 +1982,103 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                 camera_session_id = session.get('camera_session_id')
                 imu_session_id = session.get('imu_session_id')
                 
-                    # Save data (usage mode: save to dataset/, train mode: data already saved to MLTRAIN*)
+                # Save data (usage mode: save to dataset/, train mode: data already saved to MLTRAIN*)
                 if action == 'save_only':
-                        # Save to regular dataset collector
-                        if session.get('dataset_collection_enabled') and dataset_collector and dataset_collector.is_collecting:
+                    # Save to regular dataset collector
+                    if session.get('dataset_collection_enabled') and dataset_collector and dataset_collector.is_collecting:
                         try:
                             if len(dataset_collector.current_samples) == 0:
                                 print(f"⚠️ Usage mode: No samples to save (current_samples is empty)")
-                            await websocket.send_json({
-                            'type': 'training_status',
-                            'status': 'error',
-                            'message': 'Kaydedilecek veri yok. Rep tamamlandığında veriler toplandı mı kontrol edin.'
-                            })
-                            continue
+                                await websocket.send_json({
+                                    'type': 'training_status',
+                                    'status': 'error',
+                                    'message': 'Kaydedilecek veri yok. Rep tamamlandığında veriler toplandı mı kontrol edin.'
+                                })
+                                continue
                             else:
-                            dataset_collector.save_session(auto_label_perfect=True)
-                            print(f"💾 Usage mode: Saved session to dataset/ ({len(dataset_collector.current_samples)} samples)")
-                            except Exception as e:
+                                dataset_collector.save_session(auto_label_perfect=True)
+                                print(f"💾 Usage mode: Saved session to dataset/ ({len(dataset_collector.current_samples)} samples)")
+                        except Exception as e:
                             print(f"⚠️ Error saving usage mode session: {e}")
                             import traceback
                             traceback.print_exc()
                             await websocket.send_json({
-                            'type': 'training_status',
-                            'status': 'error',
-                            'message': f'Kayıt hatası: {str(e)}'
+                                'type': 'training_status',
+                                'status': 'error',
+                                'message': f'Kayıt hatası: {str(e)}'
                             })
                             continue
                     elif ml_mode == 'usage':
                         # Usage mode but collector not available
-                            print(f"⚠️ Usage mode: Cannot save - collector not available or not collecting")
-                            await websocket.send_json({
-                                'type': 'training_status',
-                                'status': 'error',
-                                'message': 'Veri toplayıcı aktif değil. Veriler kaydedilemedi.'
-                            })
-                            continue
+                        print(f"⚠️ Usage mode: Cannot save - collector not available or not collecting")
+                        await websocket.send_json({
+                            'type': 'training_status',
+                            'status': 'error',
+                            'message': 'Veri toplayıcı aktif değil. Veriler kaydedilemedi.'
+                        })
+                        continue
                     else:
                         # Train mode: Check if data was already saved, if not save now
                         camera_collector = camera_training_collectors.get(exercise)
                         imu_collector = imu_training_collectors.get(exercise)
                         
                         # Check if data was already saved (session_id stored means it was saved)
-                            # Add session-level continuous data (all data throughout session, rep sayılsın ya da sayılmasın)
+                        # Add session-level continuous data (all data throughout session, rep sayılsın ya da sayılmasın)
                         if not camera_session_id and camera_collector and camera_collector.is_collecting:
                             session_landmarks = session.get('session_landmarks', [])
                             session_imu_samples = session.get('session_imu_samples', [])
                             session_start_time = session.get('session_start_time', time.time())
                             
-                                # Extract landmarks from session buffer
+                            # Extract landmarks from session buffer
                             if session_landmarks:
                                 landmarks_sequence = [item['landmarks'] for item in session_landmarks]
                                 if len(landmarks_sequence) > 0:
-                                try:
-                                camera_collector.add_rep_sample(
-                                exercise=exercise,
-                                rep_number=0,  # rep_number=0 means session-level continuous data
-                                landmarks_sequence=landmarks_sequence,
-                                imu_sequence=None,
-                                user_id='default'
-                                )
-                                print(f"📹 Added session-level continuous camera data: {len(landmarks_sequence)} frames (rep_number=0)")
-                                except Exception as e:
-                                print(f"⚠️  Failed to add session-level camera data: {e}")
+                                    try:
+                                        camera_collector.add_rep_sample(
+                                            exercise=exercise,
+                                            rep_number=0,  # rep_number=0 means session-level continuous data
+                                            landmarks_sequence=landmarks_sequence,
+                                            imu_sequence=None,
+                                            user_id='default'
+                                        )
+                                        print(f"📹 Added session-level continuous camera data: {len(landmarks_sequence)} frames (rep_number=0)")
+                                    except Exception as e:
+                                        print(f"⚠️  Failed to add session-level camera data: {e}")
 
                             if len(session_imu_samples) > 0 and imu_collector and imu_collector.is_collecting:
                                 try:
                                     # Remove rep_number from samples before adding to collector
-                                imu_data_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in session_imu_samples]
-                                imu_collector.add_rep_sequence(
-                                rep_number=0,  # rep_number=0 means session-level continuous data
-                                imu_sequence=imu_data_seq,
-                                rep_start_time=session_start_time
-                                )
-                                print(f"📡 Added session-level continuous IMU data: {len(imu_data_seq)} samples (rep_number=0)")
+                                    imu_data_seq = [{k: v for k, v in s.items() if k != 'rep_number'} for s in session_imu_samples]
+                                    imu_collector.add_rep_sequence(
+                                        rep_number=0,  # rep_number=0 means session-level continuous data
+                                        imu_sequence=imu_data_seq,
+                                        rep_start_time=session_start_time
+                                    )
+                                    print(f"📡 Added session-level continuous IMU data: {len(imu_data_seq)} samples (rep_number=0)")
                                 except Exception as e:
-                                print(f"⚠️  Failed to add session-level IMU data: {e}")
+                                    print(f"⚠️  Failed to add session-level IMU data: {e}")
 
                             # Data not saved yet, save it now (including session-level)
                             try:
-                            if len(camera_collector.current_samples) > 0:
+                                if len(camera_collector.current_samples) > 0:
                                     camera_collector.save_session(auto_label_perfect=True)
-                                camera_session_id = camera_collector.current_session_id
-                                num_samples = len(camera_collector.current_samples)
-                                print(f"💾 Saved camera training dataset: {num_samples} samples (reps + session-level) → MLTRAINCAMERA/{exercise}/ (session: {camera_session_id})")
-                                session['camera_session_id'] = camera_session_id
-                                except Exception as e:
+                                    camera_session_id = camera_collector.current_session_id
+                                    num_samples = len(camera_collector.current_samples)
+                                    print(f"💾 Saved camera training dataset: {num_samples} samples (reps + session-level) → MLTRAINCAMERA/{exercise}/ (session: {camera_session_id})")
+                                    session['camera_session_id'] = camera_session_id
+                            except Exception as e:
                                 print(f"⚠️  Failed to save camera training dataset: {e}")
                                 import traceback
                                 traceback.print_exc()
 
-                                try:
+                            try:
                                 if imu_collector and imu_collector.is_collecting and len(imu_collector.current_samples) > 0:
                                     imu_collector.save_session()
-                                imu_session_id = imu_collector.current_session_id
-                                num_samples = len(imu_collector.current_samples)
-                                print(f"💾 Saved IMU training dataset: {num_samples} sequences (reps + session-level) → MLTRAINIMU/{exercise}/ (session: {imu_session_id})")
-                                session['imu_session_id'] = imu_session_id
-                                except Exception as e:
+                                    imu_session_id = imu_collector.current_session_id
+                                    num_samples = len(imu_collector.current_samples)
+                                    print(f"💾 Saved IMU training dataset: {num_samples} sequences (reps + session-level) → MLTRAINIMU/{exercise}/ (session: {imu_session_id})")
+                                    session['imu_session_id'] = imu_session_id
+                            except Exception as e:
                                 print(f"⚠️  Failed to save IMU training dataset: {e}")
                                 import traceback
                                 traceback.print_exc()
@@ -2122,7 +2122,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                             print(f"   Cleared camera training data for {exercise}")
                         
                         if imu_collector and imu_collector.is_collecting:
-                                imu_collector.current_samples = []  # Clear collected samples
+                            imu_collector.current_samples = []  # Clear collected samples
                             imu_collector.stop_session()
                             print(f"   Cleared IMU training data for {exercise}")
                     

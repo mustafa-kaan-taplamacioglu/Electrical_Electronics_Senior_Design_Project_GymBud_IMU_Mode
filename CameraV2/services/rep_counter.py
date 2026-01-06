@@ -16,7 +16,7 @@ class RepCounter:
         'bicep_curls': {'min': 40, 'max': 160, 'range_pct': 0.7},
         'squats': {'min': 75, 'max': 165, 'range_pct': 0.6},
         'lateral_shoulder_raises': {'min': 20, 'max': 80, 'range_pct': 0.7},
-        'triceps_pushdown': {'min': 50, 'max': 160, 'range_pct': 0.6},
+        'tricep_extensions': {'min': 60, 'max': 170, 'range_pct': 0.7},
         'dumbbell_rows': {'min': 50, 'max': 155, 'range_pct': 0.6},
         'dumbbell_shoulder_press': {'min': 80, 'max': 165, 'range_pct': 0.6},
     }
@@ -183,7 +183,7 @@ class RepCounter:
                     self.phase = 'down'
                     result = self.complete_rep()
         
-        elif self.exercise == 'triceps_pushdown':
+        elif self.exercise == 'tricep_extensions':
             # BONE-BASED TRICEP EXTENSION REP COUNTING
             if landmarks:
                 # Use elbow angle

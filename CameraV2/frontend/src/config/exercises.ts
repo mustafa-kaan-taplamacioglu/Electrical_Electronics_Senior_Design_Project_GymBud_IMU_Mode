@@ -37,16 +37,16 @@ export const EXERCISES: Record<ExerciseType, ExerciseConfig> = {
       'Lower with control',
     ],
   },
-  triceps_pushdown: {
-    name: 'triceps_pushdown',
-    displayName: 'Triceps Pushdown',
+  tricep_extensions: {
+    name: 'tricep_extensions',
+    displayName: 'Tricep Extension',
     description: 'Triceps workout',
     primaryJoints: ['shoulder', 'elbow', 'wrist'],
-    repThreshold: { up: 160, down: 60 },
+    repThreshold: { up: 170, down: 60 },
     formTips: [
-      'Keep upper arm stable',
-      'Only elbow moves',
-      'Full extension',
+      'Dirseği sabit tut',
+      'Sadece ön kol hareket etsin',
+      'Kolu tam aç',
     ],
   },
   dumbbell_rows: {

@@ -150,7 +150,7 @@ class IMUPeriodicRepDetector:
         Rep detection için: Hareketin başında/sonunda magnitude azalır (valley detection).
         """
         # Exercise'e göre hangi node'ları kullanacağımızı belirle
-        if self.exercise in ['bicep_curls', 'triceps_pushdown', 'dumbbell_rows']:
+        if self.exercise in ['bicep_curls', 'tricep_extensions', 'dumbbell_rows']:
             # Her iki wrist de kullanılabilir - average al
             left_wrist = imu_sample.get('left_wrist', {})
             right_wrist = imu_sample.get('right_wrist', {})
@@ -443,7 +443,7 @@ EXERCISE_FEEDBACK_LIBRARY = {
         11: "🟡 Kontrolü artır, omuzları silkmeyi bırak. Yavaş ve kontrollü hareket et.",
         12: "🔴 Omuzlarını yukarı kaldırma! Sadece kolları kaldır, omuzlar düşük kalsın."
     },
-    'triceps_pushdown': {
+    'tricep_extensions': {
         1: "🎉 Mükemmel triceps pushdown! Üst kol sabit, form harika. Devam et!",
         2: "💪 Çok iyi! Üst kol sabit, sadece dirsek hareket ediyor. İyi gidiyorsun!",
         3: "👍 İyi form, üst kolunu biraz daha sabit tut. Sallanmayı azalt.",

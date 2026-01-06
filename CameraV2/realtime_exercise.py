@@ -71,7 +71,7 @@ EXERCISE_CONFIG = {
             "Kalça geriye"
         ]
     },
-    "triceps_pushdown": {
+    "tricep_extensions": {
         "joints": {
             "left": (11, 13, 15),
             "right": (12, 14, 16)
@@ -115,7 +115,7 @@ EXERCISE_CONFIG = {
             "Omuzları silkme"
         ]
     },
-    "triceps_pushdown": {
+    "tricep_extensions": {
         "joints": {
             "left": (11, 13, 15),
             "right": (12, 14, 16)
@@ -261,7 +261,7 @@ class FormAnalyzer:
             "bicep_curls": {11, 12, 13, 14, 15, 16},  # shoulders, elbows, wrists
             "squats": {23, 24, 25, 26, 27, 28},        # hips, knees, ankles
             "lateral_shoulder_raises": {11, 12, 13, 14, 15, 16},  # shoulders, elbows, wrists
-            "triceps_pushdown": {11, 12, 13, 14, 15, 16},        # shoulders, elbows, wrists
+            "tricep_extensions": {11, 12, 13, 14, 15, 16},        # shoulders, elbows, wrists
             "dumbbell_rows": {11, 12, 13, 14, 23, 24},            # shoulders, elbows, hips
             "dumbbell_shoulder_press": {11, 12, 13, 14, 15, 16, 23, 24},  # upper body
         }
@@ -859,7 +859,7 @@ class FormAnalyzer:
             return self.check_squats_form(landmarks, w, h)
         elif exercise == "lateral_shoulder_raises":
             return self.check_lateral_raises_form(landmarks, w, h)
-        elif exercise == "triceps_pushdown":
+        elif exercise == "tricep_extensions":
             return self.check_tricep_extensions_form(landmarks, w, h)  # Same form checks
         elif exercise == "dumbbell_rows":
             return self.check_dumbbell_rows_form(landmarks, w, h)

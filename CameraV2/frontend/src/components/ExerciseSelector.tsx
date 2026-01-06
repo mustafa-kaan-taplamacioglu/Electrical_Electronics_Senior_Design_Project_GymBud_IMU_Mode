@@ -10,7 +10,7 @@ const exerciseIcons: Record<ExerciseType, string> = {
   bicep_curls: '💪',
   squats: '🦵',
   lateral_shoulder_raises: '🙆',
-  triceps_pushdown: '💪',
+  tricep_extensions: '💪',
   dumbbell_rows: '🏋️',
   dumbbell_shoulder_press: '🏋️‍♂️',
 };

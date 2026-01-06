@@ -119,7 +119,7 @@ python3 << 'PYEOF'
 from pathlib import Path
 
 exercises = ['bicep_curls', 'squats', 'lateral_shoulder_raises', 
-             'triceps_pushdown', 'dumbbell_rows', 'dumbbell_shoulder_press']
+             'tricep_extensions', 'dumbbell_rows', 'dumbbell_shoulder_press']
 modes = ['camera', 'imu', 'fusion']
 
 total_expected = len(exercises) * len(modes)

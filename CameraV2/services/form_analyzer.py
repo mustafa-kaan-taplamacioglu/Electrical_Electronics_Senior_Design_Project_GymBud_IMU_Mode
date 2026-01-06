@@ -26,7 +26,14 @@ EXERCISE_CONFIG = {
         "required_landmarks": list(range(0, 23)),  # 0-22: Face + Upper Body + Hands
         "calibration_message": "Face, upper body, and hands must be visible",
     },
-    "triceps_pushdown": {
+    "tricep_extensions": {
+        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
+        "rep_threshold": {"up": 160, "down": 60},
+        # Upper body: Face (0-10), Upper Body (11-16), Hands (17-22) = 23 landmarks
+        "required_landmarks": list(range(0, 23)),  # 0-22: Face + Upper Body + Hands
+        "calibration_message": "Face, upper body, and hands must be visible",
+    },
+    "tricep_extensions": {
         "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
         "rep_threshold": {"up": 160, "down": 60},
         # Upper body: Face (0-10), Upper Body (11-16), Hands (17-22) = 23 landmarks
@@ -608,7 +615,7 @@ class FormAnalyzer:
             scores.extend(head_scores)
         
         # === TRICEP EXTENSIONS ===
-        elif self.exercise == 'triceps_pushdown':
+        elif self.exercise == 'tricep_extensions':
             # --- ARMS REGION ---
             # 1. Upper arm angle (should be close to vertical, pointing up)
             left_upper_arm_angle = get_bone_angle_from_vertical(landmarks, 'left_upper_arm')
@@ -884,7 +891,7 @@ class FormAnalyzer:
         head_score = sum(head_scores) / len(head_scores) if head_scores else 100
         
         # Calculate final score (weighted average based on exercise type)
-        if self.exercise in ['bicep_curls', 'lateral_shoulder_raises', 'triceps_pushdown', 'dumbbell_shoulder_press']:
+        if self.exercise in ['bicep_curls', 'lateral_shoulder_raises', 'tricep_extensions', 'dumbbell_shoulder_press']:
             # Upper body exercises: arms 50%, core 30%, head 10%, legs 10%
             final_score = (arms_score * 0.5 + core_score * 0.3 + head_score * 0.1 + legs_score * 0.1)
         elif self.exercise == 'squats':

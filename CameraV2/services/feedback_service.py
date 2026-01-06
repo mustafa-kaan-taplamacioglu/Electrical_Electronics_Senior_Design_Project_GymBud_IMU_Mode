@@ -65,7 +65,7 @@ EXERCISE_FEEDBACK_LIBRARY = {
         11: "🟡 Kontrolü artır, omuzları silkmeyi bırak. Yavaş ve kontrollü hareket et.",
         12: "🔴 Omuzlarını yukarı kaldırma! Sadece kolları kaldır, omuzlar düşük kalsın."
     },
-    'triceps_pushdown': {
+    'tricep_extensions': {
         1: "🎉 Mükemmel triceps pushdown! Üst kol sabit, form harika. Devam et!",
         2: "💪 Çok iyi! Üst kol sabit, sadece dirsek hareket ediyor. İyi gidiyorsun!",
         3: "👍 İyi form, üst kolunu biraz daha sabit tut. Sallanmayı azalt.",
@@ -158,7 +158,7 @@ def select_feedback_category(
         'bicep_curls': (90, 120),
         'squats': (70, 100),
         'lateral_shoulder_raises': (50, 80),
-        'triceps_pushdown': (80, 120),
+        'tricep_extensions': (80, 140),
         'dumbbell_rows': (80, 110),
         'dumbbell_shoulder_press': (60, 90)
     }
@@ -224,7 +224,7 @@ def select_feedback_category(
     # ✅ IMU-based checks (IMU mode or Fusion mode)
     if (fusion_mode in ['imu_only', 'camera_primary']) and imu_data:
         # Check for excessive wrist movement (bicep curls, triceps pushdown)
-        if exercise in ['bicep_curls', 'triceps_pushdown']:
+        if exercise in ['bicep_curls', 'tricep_extensions']:
             left_wrist = imu_data.get('left_wrist', {})
             right_wrist = imu_data.get('right_wrist', {})
             

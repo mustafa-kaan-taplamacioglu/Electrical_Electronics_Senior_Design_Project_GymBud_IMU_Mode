@@ -283,14 +283,14 @@
   ],
   "feature_count": 278,
   "is_trained": true,
-  "training_date": "2026-01-05T18:44:06.449782",
+  "training_date": "2026-01-06T20:20:21.349788",
   "exercise": "bicep_curls",
   "training_samples": 564,
   "performance": {
     "train_mse": 16.385902012417944,
-    "test_mse": 7.76275771440766,
-    "train_mae": 1.3063835619082678,
-    "test_mae": 0.9914008240546768,
+    "test_mse": 7.762757714407661,
+    "train_mae": 1.3063835619082675,
+    "test_mae": 0.9914008240546772,
     "train_r2": 0.8684149309876282,
     "test_r2": 0.8670917565908868
   },

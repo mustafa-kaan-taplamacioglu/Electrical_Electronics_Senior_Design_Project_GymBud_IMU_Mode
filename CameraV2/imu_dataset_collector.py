@@ -8,6 +8,7 @@ import csv
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
+import pandas as pd
 
 
 class IMUDatasetCollector:
@@ -197,7 +198,7 @@ class IMUDatasetCollector:
     
     def load_session(self, session_id: str, exercise: str = None) -> Dict:
         """
-        Load a saved session.
+        Load a saved session (supports both JSON and CSV formats).
         
         Args:
             session_id: Session ID
@@ -214,17 +215,148 @@ class IMUDatasetCollector:
                 potential_dir = exercise_dir / session_id
                 if potential_dir.exists():
                     session_dir = potential_dir
+                    exercise = exercise_dir.name
                     break
         
         if session_dir is None or not session_dir.exists():
             raise FileNotFoundError(f"Session {session_id} not found" + (f" for exercise {exercise}" if exercise else ""))
         
-        json_path = session_dir / "imu_samples.json"
-        if not json_path.exists():
-            raise FileNotFoundError(f"Session file {json_path} not found")
+        # Try multiple JSON filename patterns
+        json_paths = [
+            session_dir / "imu_samples.json",  # Preferred format (IMU dataset format)
+            session_dir / "samples.json",      # Alternative format (Camera dataset format with imu_sequence)
+        ]
+        csv_path = session_dir / "imu_samples.csv"
         
-        with open(json_path, 'r') as f:
-            return json.load(f)
+        # Try JSON first (preferred format)
+        for json_path in json_paths:
+            if json_path.exists():
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+                    
+                    # Check if this is camera dataset format (list of RepSamples) or IMU format (dict)
+                    if isinstance(data, list):
+                        # Camera dataset format: convert to IMU format
+                        return self._convert_camera_samples_to_imu_format(data, session_id, exercise)
+                    else:
+                        # IMU dataset format: return as-is
+                        return data
+        
+        # Fallback to CSV format
+        if csv_path.exists():
+            return self._load_session_from_csv(csv_path, session_id, exercise)
+        
+        checked_files = [str(p) for p in json_paths + [csv_path]]
+        raise FileNotFoundError(f"Session file not found (checked: {', '.join(checked_files)})")
+    
+    def _convert_camera_samples_to_imu_format(self, rep_samples: List[Dict], session_id: str, exercise: str) -> Dict:
+        """
+        Convert camera dataset format (list of RepSamples with imu_sequence) to IMU dataset format.
+        
+        Args:
+            rep_samples: List of RepSample dicts from camera dataset
+            session_id: Session ID
+            exercise: Exercise name
+        
+        Returns:
+            Dict in IMU dataset format (compatible with load_dataset)
+        """
+        imu_rep_samples = []
+        
+        for rep_sample in rep_samples:
+            if 'imu_sequence' in rep_sample and rep_sample['imu_sequence']:
+                # Extract IMU sequence
+                imu_sequence = rep_sample['imu_sequence']
+                rep_number = rep_sample.get('rep_number', 0)
+                timestamp = rep_sample.get('timestamp', 0)
+                
+                # Create IMU rep sample
+                imu_rep_samples.append({
+                    'rep_number': rep_number,
+                    'samples': imu_sequence,  # Already in correct format
+                    'rep_start_time': timestamp,
+                    'camera_rep_timestamp': timestamp
+                })
+        
+        return {
+            'session_id': session_id,
+            'total_reps': len(imu_rep_samples),
+            'samples': imu_rep_samples
+        }
+    
+    def _load_session_from_csv(self, csv_path: Path, session_id: str, exercise: str) -> Dict:
+        """
+        Load session from CSV format (fallback when JSON doesn't exist).
+        
+        Args:
+            csv_path: Path to imu_samples.csv
+            session_id: Session ID
+            exercise: Exercise name
+        
+        Returns:
+            Dict in same format as JSON (for compatibility)
+        """
+        
+        df = pd.read_csv(csv_path)
+        
+        # Group by rep_number
+        rep_samples = []
+        valid_rep_numbers = sorted(df[df['rep_number'] > 0]['rep_number'].unique())
+        
+        for rep_num in valid_rep_numbers:
+            rep_df = df[df['rep_number'] == rep_num].sort_values('timestamp')
+            
+            # Convert CSV rows to IMU sample format
+            samples = []
+            current_timestamp = None
+            current_sample = None
+            
+            for _, row in rep_df.iterrows():
+                timestamp = float(row['timestamp'])
+                node_name = row['node_name']
+                
+                # New timestamp = new sample
+                if current_timestamp != timestamp:
+                    if current_sample is not None:
+                        samples.append(current_sample)
+                    
+                    current_timestamp = timestamp
+                    current_sample = {
+                        'timestamp': timestamp,
+                        node_name: {
+                            'ax': float(row['ax']), 'ay': float(row['ay']), 'az': float(row['az']),
+                            'gx': float(row['gx']), 'gy': float(row['gy']), 'gz': float(row['gz']),
+                            'qw': float(row['qw']), 'qx': float(row['qx']), 'qy': float(row['qy']), 'qz': float(row['qz']),
+                            'roll': float(row['roll']), 'pitch': float(row['pitch']), 'yaw': float(row['yaw']),
+                        }
+                    }
+                else:
+                    # Same timestamp, add another node
+                    current_sample[node_name] = {
+                        'ax': float(row['ax']), 'ay': float(row['ay']), 'az': float(row['az']),
+                        'gx': float(row['gx']), 'gy': float(row['gy']), 'gz': float(row['gz']),
+                        'qw': float(row['qw']), 'qx': float(row['qx']), 'qy': float(row['qy']), 'qz': float(row['qz']),
+                        'roll': float(row['roll']), 'pitch': float(row['pitch']), 'yaw': float(row['yaw']),
+                    }
+            
+            # Add last sample
+            if current_sample is not None:
+                samples.append(current_sample)
+            
+            # Create rep sample
+            if samples:
+                rep_samples.append({
+                    'rep_number': int(rep_num),
+                    'samples': samples,
+                    'rep_start_time': samples[0]['timestamp'] if samples else 0,
+                    'camera_rep_timestamp': samples[0]['timestamp'] if samples else 0
+                })
+        
+        return {
+            'session_id': session_id,
+            'total_reps': len(rep_samples),
+            'samples': rep_samples
+        }
     
     def load_all_sessions(self, exercise: Optional[str] = None) -> List[Dict]:
         """

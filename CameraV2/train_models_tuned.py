@@ -131,7 +131,7 @@ def main():
     parser = argparse.ArgumentParser(description="Train optimized ML models with hyperparameter tuning")
     parser.add_argument('--exercise', type=str, required=True,
                        choices=['bicep_curls', 'squats', 'lateral_shoulder_raises', 
-                               'triceps_pushdown', 'dumbbell_rows', 'dumbbell_shoulder_press'],
+                               'tricep_extensions', 'dumbbell_rows', 'dumbbell_shoulder_press'],
                        help='Exercise type to train')
     parser.add_argument('--camera-only', action='store_true',
                        help='Train only camera model')

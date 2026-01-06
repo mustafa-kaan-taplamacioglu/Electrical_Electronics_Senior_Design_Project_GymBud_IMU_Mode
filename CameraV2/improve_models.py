@@ -151,7 +151,7 @@ def main():
     parser = argparse.ArgumentParser(description="Improve model performance")
     parser.add_argument('--exercise', type=str, required=True,
                        choices=['bicep_curls', 'squats', 'lateral_shoulder_raises', 
-                               'triceps_pushdown', 'dumbbell_rows', 'dumbbell_shoulder_press'],
+                               'tricep_extensions', 'dumbbell_rows', 'dumbbell_shoulder_press'],
                        help='Exercise type')
     parser.add_argument('--type', type=str, default='camera',
                        choices=['camera', 'imu', 'fusion', 'all'],

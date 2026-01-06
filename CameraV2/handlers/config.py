@@ -22,7 +22,13 @@ EXERCISE_CONFIG = {
         "required_landmarks": list(range(0, 23)),
         "calibration_message": "Face, upper body, and hands must be visible",
     },
-    "triceps_pushdown": {
+    "tricep_extensions": {
+        "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
+        "rep_threshold": {"up": 160, "down": 60},
+        "required_landmarks": list(range(0, 23)),
+        "calibration_message": "Face, upper body, and hands must be visible",
+    },
+    "tricep_extensions": {
         "joints": {"left": (11, 13, 15), "right": (12, 14, 16)},
         "rep_threshold": {"up": 160, "down": 60},
         "required_landmarks": list(range(0, 23)),

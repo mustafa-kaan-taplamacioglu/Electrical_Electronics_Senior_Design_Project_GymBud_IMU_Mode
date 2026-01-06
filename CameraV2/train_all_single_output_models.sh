@@ -1,7 +1,7 @@
 #!/bin/bash
 # Train all 18 single-output models (6 exercises × 3 modes)
 
-EXERCISES=("bicep_curls" "squats" "lateral_shoulder_raises" "triceps_pushdown" "dumbbell_rows" "dumbbell_shoulder_press")
+EXERCISES=("bicep_curls" "squats" "lateral_shoulder_raises" "tricep_extensions" "dumbbell_rows" "dumbbell_shoulder_press")
 
 echo "════════════════════════════════════════════════════════════════"
 echo "🚀 Training All 18 Single-Output Models"

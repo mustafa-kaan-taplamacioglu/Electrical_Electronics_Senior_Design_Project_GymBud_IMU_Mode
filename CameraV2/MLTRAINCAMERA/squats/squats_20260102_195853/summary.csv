@@ -1,5 +1,0 @@
-rep_number,timestamp,expert_score,is_perfect,user_feedback,arms_score,legs_score,core_score,head_score,min_angle,max_angle,range_of_motion
-1,1767373175.848289,90.0,True,,100,100,60.0,100,36.7,180.0,143.3
-2,1767373180.243293,,,,100,40.0,60.0,100,64.2,173.2,108.99999999999999
-3,1767373182.84296,90.0,True,,100,100,60.0,100,61.3,174.5,113.2
-0,1767373504.85619,,,,,,,,,,
