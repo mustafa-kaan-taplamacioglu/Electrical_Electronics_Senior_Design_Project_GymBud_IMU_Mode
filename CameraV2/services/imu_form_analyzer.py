@@ -104,22 +104,47 @@ class IMUFormAnalyzer:
             imu_analysis['movement_quality']['tempo'] = tempo_analysis
             if tempo_analysis['status'] == 'too_fast':
                 arms_issues.append('Çok hızlı - yavaşla! 2-3 saniye tempo ideal.')
-                arms_scores.append(70)
+                arms_scores.append(50)  # 70 → 50 (daha sert penalty)
             elif tempo_analysis['status'] == 'too_slow':
                 arms_issues.append('Biraz hızlandırabilirsin. 2-3 saniye tempo optimal.')
-                arms_scores.append(75)
+                arms_scores.append(55)  # 75 → 55 (daha sert penalty)
             else:
                 arms_scores.append(95)  # Ideal tempo bonus
         
         # === FINAL SKOR HESAPLAMA ===
-        arms_score = sum(arms_scores) / len(arms_scores) if arms_scores else 70
+        # Weighted average yerine daha agresif hesaplama
+        if arms_scores:
+            # Pitch range skorları daha ağırlıklı (ROM en önemli)
+            pitch_scores = [s for s in arms_scores if s > 0]  # Sadece pozitif skorlar
+            if pitch_scores:
+                # Minimum skorları düşür
+                min_score = min(pitch_scores)
+                if min_score < 60:  # Kötü pitch range varsa
+                    arms_score = sum(arms_scores) / len(arms_scores) * 0.8  # %20 penalty
+                else:
+                    arms_score = sum(arms_scores) / len(arms_scores)
+            else:
+                arms_score = 50  # Default daha düşük (70 → 50)
+        else:
+            arms_score = 50  # Default daha düşük (70 → 50)
         
         # IMU-only mode için sadece arms score kullanılır (diğer bölgeler N/A)
         final_score = arms_score
         
-        # Penalty for critical issues
-        if any('çok' in issue.lower() or 'fazla' in issue.lower() for issue in arms_issues):
-            final_score = min(final_score, 60)
+        # Daha agresif penalty'ler
+        critical_issues = [i for i in arms_issues if any(word in i.lower() for word in ['çok', 'fazla', 'yetersiz', 'kısıtlı'])]
+        if critical_issues:
+            # Her kritik issue için %10 penalty
+            penalty = len(critical_issues) * 0.10
+            final_score = final_score * (1 - penalty)
+            final_score = max(20, final_score)  # Minimum 20'ye düşebilir
+        
+        # Çok kötü form için cap
+        if any('çok' in issue.lower() and ('dar' in issue.lower() or 'kısıtlı' in issue.lower()) for issue in arms_issues):
+            final_score = min(final_score, 45)  # Max 45'e düşür
+        
+        if any('fazla' in issue.lower() and ('dönüş' in issue.lower() or 'sapma' in issue.lower()) for issue in arms_issues):
+            final_score = min(final_score, 50)  # Max 50'ye düşür
         
         return {
             'score': round(final_score, 1),
@@ -187,12 +212,12 @@ class IMUFormAnalyzer:
             analysis['pitch_status'] = 'moderate'
             analysis['pitch_feedback'] = f'{wrist_name}: {pitch_range_normalized:.0f}° ROM (Orta - Daha geniş açı hedefle)'
             issues.append(f'{wrist_name} hareket açısı dar - daha geniş açı kullan')
-            scores.append(75)
+            scores.append(65)  # 75 → 65 (daha sert penalty)
         else:
             analysis['pitch_status'] = 'insufficient'
             analysis['pitch_feedback'] = f'{wrist_name}: {pitch_range_normalized:.0f}° ROM (Yetersiz - Tam açı kullan)'
             issues.append(f'{wrist_name} tam açılmamış - daha aşağı indir')
-            scores.append(55)
+            scores.append(35)  # 55 → 35 (çok daha sert penalty)
         
         analysis['pitch_range'] = round(pitch_range_normalized, 1)
         analysis['pitch_min'] = round(pitch_min, 1)
@@ -209,11 +234,11 @@ class IMUFormAnalyzer:
                 analysis['roll_status'] = 'excessive'
                 analysis['roll_feedback'] = f'{wrist_name} bilek: {roll_range:.0f}° dönüş (Fazla - Nötr tut)'
                 issues.append(f'{wrist_name} bilek fazla dönüyor - sabit tut')
-                scores.append(max(50, 100 - roll_range))
+                scores.append(max(30, 100 - roll_range))  # 50 → 30 (daha sert penalty)
             elif roll_range > 25:
                 analysis['roll_status'] = 'moderate'
                 analysis['roll_feedback'] = f'{wrist_name} bilek: {roll_range:.0f}° dönüş (Orta)'
-                scores.append(75)
+                scores.append(65)  # 75 → 65 (daha sert penalty)
             else:
                 analysis['roll_status'] = 'good'
                 analysis['roll_feedback'] = f'{wrist_name} bilek: {roll_range:.0f}° dönüş (İyi - Stabil)'
@@ -232,7 +257,7 @@ class IMUFormAnalyzer:
                 analysis['yaw_status'] = 'excessive'
                 analysis['yaw_feedback'] = f'{wrist_name}: {yaw_range:.0f}° öne/geriye sapma (Fazla)'
                 issues.append(f'{wrist_name} öne/geriye sapıyor - düz tut')
-                scores.append(max(60, 100 - yaw_range))
+                scores.append(max(40, 100 - yaw_range))  # 60 → 40 (daha sert penalty)
             else:
                 analysis['yaw_status'] = 'good'
                 analysis['yaw_feedback'] = f'{wrist_name}: {yaw_range:.0f}° sapma (İyi)'
@@ -274,11 +299,11 @@ class IMUFormAnalyzer:
                     analysis['gyro_status'] = 'too_fast'
                     analysis['gyro_feedback'] = f'{wrist_name}: {gyro_max:.0f}°/s max (Çok hızlı - Yavaşla!)'
                     issues.append(f'{wrist_name} çok hızlı hareket ediyor')
-                    scores.append(65)
+                    scores.append(45)  # 65 → 45 (daha sert penalty)
                 elif gyro_max > 300:
                     analysis['gyro_status'] = 'fast'
                     analysis['gyro_feedback'] = f'{wrist_name}: {gyro_max:.0f}°/s max (Hızlı)'
-                    scores.append(80)
+                    scores.append(70)  # 80 → 70 (daha sert penalty)
                 else:
                     analysis['gyro_status'] = 'controlled'
                     analysis['gyro_feedback'] = f'{wrist_name}: {gyro_max:.0f}°/s max (Kontrollü)'
@@ -301,7 +326,7 @@ class IMUFormAnalyzer:
         """Bilateral simetri analizi."""
         issues = []
         analysis = {}
-        score = 85  # Default
+        score = 70  # Default (85 → 70)
         
         # Pitch range karşılaştırması
         lw_pitches = [w.get('pitch', 0) for w in left_wrist_data if w.get('pitch') is not None]
@@ -326,13 +351,13 @@ class IMUFormAnalyzer:
                 analysis['status'] = 'moderate'
                 analysis['feedback'] = f'Simetri: {pitch_diff_pct:.1f}% fark (Orta - Eşitlemeye çalış)'
                 issues.append('Kollar asimetrik - eşit hareket et')
-                score = 75
+                score = 65  # 75 → 65 (daha sert penalty)
             else:
                 weaker = 'sol' if lw_pitch_range < rw_pitch_range else 'sağ'
                 analysis['status'] = 'poor'
                 analysis['feedback'] = f'Simetri: {pitch_diff_pct:.1f}% fark ({weaker.capitalize()} kol zayıf - Odaklan!)'
                 issues.append(f'{weaker.capitalize()} kol daha az hareket ediyor - eşitle')
-                score = 60
+                score = 45  # 60 → 45 (daha sert penalty)
             
             analysis['pitch_diff'] = round(pitch_diff, 1)
             analysis['pitch_diff_pct'] = round(pitch_diff_pct, 1)

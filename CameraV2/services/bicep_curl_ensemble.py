@@ -247,11 +247,12 @@ class BicepCurlEnsembleModel:
                 # Scale from mean to ideal
                 pitch_score = 70 + 30 * (pitch_range - mean_range) / (ideal_range - mean_range)
             elif pitch_range >= mean_range * 0.6:
-                # Below mean but acceptable
-                pitch_score = 50 + 20 * (pitch_range - mean_range * 0.6) / (mean_range * 0.4)
+                # Below mean but acceptable - daha düşük minimum
+                pitch_score = 40 + 20 * (pitch_range - mean_range * 0.6) / (mean_range * 0.4)
                 issues.append("Hareket açısı biraz dar")
             else:
-                pitch_score = 30 + 20 * pitch_range / (mean_range * 0.6)
+                # Çok daha düşük minimum: 30 → 15-25
+                pitch_score = max(15, 20 + 10 * pitch_range / (mean_range * 0.6))
                 issues.append("Hareket açısı çok dar - kolu tam kaldır")
             
             score_components.append(('pitch', pitch_score, 0.40))
@@ -262,21 +263,22 @@ class BicepCurlEnsembleModel:
             elif pitch_range >= 90:
                 pitch_score = 70 + 30 * (pitch_range - 90) / 30
             else:
-                pitch_score = max(30, pitch_range / 90 * 70)
+                # Daha düşük minimum: 30 → 15-25
+                pitch_score = max(15, pitch_range / 90 * 60)
                 issues.append("Hareket açısı dar")
             score_components.append(('pitch', pitch_score, 0.40))
         
-        # 2. Speed/Tempo Score (25% weight)
+        # 2. Speed/Tempo Score (25% weight) - Daha sert penalty'ler
         speed_class = self.classify_speed(rep_duration)['class']
         if speed_class == 'medium':
             speed_score = 100.0
         elif speed_class in ['fast', 'slow']:
-            speed_score = 85.0
+            speed_score = 80.0  # 85 → 80
         elif speed_class == 'very_fast':
-            speed_score = 65.0
+            speed_score = 45.0  # 65 → 45 (çok hızlı = kötü form)
             issues.append("Çok hızlı - yavaşla")
         else:  # very_slow
-            speed_score = 70.0
+            speed_score = 55.0  # 70 → 55 (çok yavaş = kötü form)
             issues.append("Çok yavaş")
         score_components.append(('speed', speed_score, 0.25))
         
@@ -286,25 +288,36 @@ class BicepCurlEnsembleModel:
             mean_gyro = self.gyro_stats.get('mean_magnitude', 150)
             max_gyro = self.gyro_stats.get('max_magnitude', 400)
             
-            # Ideal is around mean, too high or too low is bad
+            # Ideal is around mean, too high or too low is bad - Daha sert penalty'ler
             if abs(gyro_magnitude - mean_gyro) < mean_gyro * 0.3:
                 quality_score = 100.0
             elif gyro_magnitude > max_gyro * 0.9:
-                quality_score = 60.0
+                quality_score = 40.0  # 60 → 40 (çok sert = kötü form)
                 issues.append("Hareket çok sert")
             elif gyro_magnitude < mean_gyro * 0.3:
-                quality_score = 70.0
+                quality_score = 50.0  # 70 → 50 (çok yavaş = kötü form)
                 issues.append("Hareket çok yavaş/durgun")
             else:
-                # Scale based on distance from ideal
+                # Scale based on distance from ideal - Daha düşük minimum
                 deviation = abs(gyro_magnitude - mean_gyro) / mean_gyro
-                quality_score = max(60, 100 - deviation * 40)
+                quality_score = max(45, 100 - deviation * 50)  # Minimum 60 → 45
         else:
             quality_score = 75.0  # Default without reference
         score_components.append(('quality', quality_score, 0.35))
         
         # Calculate weighted average
         total_score = sum(score * weight for _, score, weight in score_components)
+        
+        # Critical issues için ekstra penalty
+        if any('çok' in issue.lower() or 'fazla' in issue.lower() for issue in issues):
+            total_score *= 0.85  # %15 penalty
+        
+        # Çok kötü form için cap
+        if pitch_range < mean_range * 0.5 if self.pitch_stats else pitch_range < 60:  # Çok dar ROM
+            total_score = min(total_score, 50)  # Max 50'e düşür
+        
+        if rep_duration < 0.8 or rep_duration > 5.0:  # Çok anormal tempo
+            total_score = min(total_score, 55)  # Max 55'e düşür
         
         return max(0, min(100, total_score)), issues
     
@@ -633,6 +646,22 @@ def calculate_wrist_scores(
     
     # Generate feedback based on comparison
     comparison_feedback = ""
+    arms_feedback = ""
+    
+    # Generate arms feedback with left vs right comparison
+    if abs(lw_pitch_range - rw_pitch_range) > 30:
+        if lw_pitch_range > rw_pitch_range:
+            arms_feedback = f"Sol kol daha geniş hareket ediyor ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
+        else:
+            arms_feedback = f"Sağ kol daha geniş hareket ediyor ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)"
+    elif abs(lw_pitch_range - rw_pitch_range) > 15:
+        if lw_pitch_range > rw_pitch_range:
+            arms_feedback = f"Sol kol biraz daha geniş ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
+        else:
+            arms_feedback = f"Sağ kol biraz daha geniş ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)"
+    else:
+        arms_feedback = f"Her iki kol dengeli ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
+    
     if abs(lw_pitch_range - rw_pitch_range) > 30:
         if lw_pitch_range > rw_pitch_range:
             comparison_feedback = "Sağ kolun hareket açısı sol koldan daha az, dengelemeye çalış."
@@ -667,7 +696,7 @@ def calculate_wrist_scores(
             'left_wrist': f"Sol Bilek: %{lw_final:.0f} (açı: {lw_pitch_range:.0f}°)",
             'right_wrist': f"Sağ Bilek: %{rw_final:.0f} (açı: {rw_pitch_range:.0f}°)",
             'sync': f"Senkronizasyon: %{sync_score:.0f}",
-            'arms': f"Kollar: %{(lw_final + rw_final) / 2:.0f}",
+            'arms': arms_feedback if arms_feedback else f"Kollar: %{(lw_final + rw_final) / 2:.0f}",
             'legs': "Bacaklar: N/A",
             'core': f"Denge: %{sync_score:.0f}",
             'head': "Kafa: N/A"

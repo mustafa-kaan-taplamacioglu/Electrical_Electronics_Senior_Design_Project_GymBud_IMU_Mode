@@ -1442,8 +1442,10 @@ export const HumanAvatar = ({
   return (
     <div 
       style={{
-        width,
-        height,
+        width: '100%',
+        height: '100%',
+        minWidth: width,
+        minHeight: height,
         borderRadius: '20px',
         overflow: 'hidden',
         border: '1px solid #2a2a3a',

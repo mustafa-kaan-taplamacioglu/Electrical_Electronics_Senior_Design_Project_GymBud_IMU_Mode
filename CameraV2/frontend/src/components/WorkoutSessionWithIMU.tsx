@@ -73,6 +73,28 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
   const [rawDataStream, setRawDataStream] = useState<string[]>([]);
   const rawDataRef = useRef<string[]>([]);
   
+  // Responsive avatar size for IMU-only mode
+  const avatarWrapperRef = useRef<HTMLDivElement>(null);
+  const [avatarSize, setAvatarSize] = useState({ width: 400, height: 480 });
+  
+  // Update avatar size on window resize (for IMU-only mode)
+  useEffect(() => {
+    const updateAvatarSize = () => {
+      if (fusionMode === 'imu_only' && avatarWrapperRef.current) {
+        const containerWidth = avatarWrapperRef.current.clientWidth;
+        const width = Math.min(containerWidth || window.innerWidth * 0.9, 600);
+        const height = width * 0.75; // 4:3 aspect ratio
+        setAvatarSize({ width, height });
+      } else {
+        setAvatarSize({ width: 400, height: 480 });
+      }
+    };
+    
+    updateAvatarSize();
+    window.addEventListener('resize', updateAvatarSize);
+    return () => window.removeEventListener('resize', updateAvatarSize);
+  }, [fusionMode]);
+  
   // IMU hook
   const {
     isConnected: imuConnected,
@@ -1165,150 +1187,165 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
           animate={{ scale: 1, opacity: 1 }}
           style={{
             background: '#1a1a1a',
-            borderRadius: '16px',
-            padding: '40px',
-            maxWidth: '600px',
+            borderRadius: '20px',
+            padding: 'clamp(24px, 4vw, 40px)',
+            maxWidth: 'min(90vw, 700px)',
             width: '90%',
-            border: '2px solid #333',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+            maxHeight: '90vh',
+            border: '2px solid rgba(59, 130, 246, 0.3)',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(59, 130, 246, 0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
           }}
         >
-          <h2 style={{ margin: '0 0 20px 0', color: '#fff', fontSize: '28px' }}>
-            📊 Eğitim Seti Seçenekleri
-          </h2>
-          <p style={{ color: '#ccc', marginBottom: '30px', fontSize: '16px' }}>
-            Toplanan verilerle ne yapmak istersiniz?
-          </p>
-
-          {/* Show feedback - always show if available */}
           <div style={{
-            background: 'rgba(59, 130, 246, 0.1)',
-            border: '1px solid #3b82f6',
-            borderRadius: '12px',
-            padding: '20px',
-            marginBottom: '30px'
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            paddingRight: '8px',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
           }}>
-            <h3 style={{ color: '#fff', fontSize: '18px', marginBottom: '10px' }}>
-              🤖 AI Coach Feedback
-            </h3>
-            {sessionFeedback ? (
-              <p style={{ color: '#ccc', fontSize: '15px', lineHeight: '1.6', margin: 0 }}>
-                {sessionFeedback}
-              </p>
-            ) : (
-              <p style={{ color: '#888', fontSize: '14px', lineHeight: '1.6', margin: 0, fontStyle: 'italic' }}>
-                Feedback yükleniyor...
-              </p>
-            )}
-          </div>
-
-          {/* Regional Scores and Feedback */}
-          {(regionalScores || regionalFeedbacks) && (
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '30px'
+            <div style={{ 
+              borderBottom: '2px solid rgba(59, 130, 246, 0.2)', 
+              paddingBottom: '20px',
+              marginBottom: '20px'
             }}>
-              <h3 style={{ color: '#fff', fontSize: '18px', marginBottom: '15px' }}>
-                📊 Bölgesel Skorlar ve Feedback
-              </h3>
-              <div style={{ display: 'grid', gap: '12px' }}>
-                {/* Arms */}
-                <div style={{
-                  padding: '12px',
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  borderRadius: '8px',
-                  borderLeft: '3px solid #3b82f6'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <strong style={{ color: '#3b82f6', fontSize: '0.9rem' }}>💪 Kollar</strong>
-                    {regionalScores?.arms !== undefined && (
-                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                        {regionalScores.arms.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  {regionalFeedbacks?.arms && (
-                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
-                      {regionalFeedbacks.arms}
-                    </p>
-                  )}
-                </div>
-
-                {/* Legs */}
-                <div style={{
-                  padding: '12px',
-                  background: 'rgba(168, 85, 247, 0.1)',
-                  borderRadius: '8px',
-                  borderLeft: '3px solid #a855f7'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <strong style={{ color: '#a855f7', fontSize: '0.9rem' }}>🦵 Bacaklar</strong>
-                    {regionalScores?.legs !== undefined && (
-                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                        {regionalScores.legs.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  {regionalFeedbacks?.legs && (
-                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
-                      {regionalFeedbacks.legs}
-                    </p>
-                  )}
-                </div>
-
-                {/* Core */}
-                <div style={{
-                  padding: '12px',
-                  background: 'rgba(249, 115, 22, 0.1)',
-                  borderRadius: '8px',
-                  borderLeft: '3px solid #f97316'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <strong style={{ color: '#f97316', fontSize: '0.9rem' }}>🏋️ Gövde</strong>
-                    {regionalScores?.core !== undefined && (
-                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                        {regionalScores.core.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  {regionalFeedbacks?.core && (
-                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
-                      {regionalFeedbacks.core}
-                    </p>
-                  )}
-                </div>
-
-                {/* Head */}
-                <div style={{
-                  padding: '12px',
-                  background: 'rgba(34, 197, 94, 0.1)',
-                  borderRadius: '8px',
-                  borderLeft: '3px solid #22c55e'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                    <strong style={{ color: '#22c55e', fontSize: '0.9rem' }}>👤 Kafa</strong>
-                    {regionalScores?.head !== undefined && (
-                      <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                        {regionalScores.head.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                  {regionalFeedbacks?.head && (
-                    <p style={{ color: '#ccc', fontSize: '0.85rem', margin: 0 }}>
-                      {regionalFeedbacks.head}
-                    </p>
-                  )}
-                </div>
-              </div>
+              <h2 style={{ 
+                margin: '0 0 12px 0', 
+                color: '#fff', 
+                fontSize: 'clamp(24px, 4vw, 32px)',
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #3b82f6 0%, #00ccff 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                📊 Eğitim Seti Seçenekleri
+              </h2>
+              <p style={{ 
+                color: '#9ca3af', 
+                margin: 0, 
+                fontSize: 'clamp(14px, 2vw, 16px)',
+                lineHeight: '1.5'
+              }}>
+                Toplanan verilerle ne yapmak istersiniz?
+              </p>
             </div>
-          )}
 
-          {trainingStatus === 'idle' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <button
+            {/* Show feedback - always show if available */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(0, 204, 255, 0.1) 100%)',
+              border: '1px solid rgba(59, 130, 246, 0.4)',
+              borderRadius: '16px',
+              padding: 'clamp(16px, 3vw, 24px)',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.1)'
+            }}>
+              <h3 style={{ 
+                color: '#fff', 
+                fontSize: 'clamp(16px, 2.5vw, 20px)', 
+                marginBottom: '12px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                🤖 AI Coach Feedback
+              </h3>
+              {sessionFeedback ? (
+                <p style={{ 
+                  color: '#e5e7eb', 
+                  fontSize: 'clamp(14px, 2vw, 15px)', 
+                  lineHeight: '1.7', 
+                  margin: 0 
+                }}>
+                  {sessionFeedback}
+                </p>
+              ) : (
+                <p style={{ 
+                  color: '#9ca3af', 
+                  fontSize: 'clamp(13px, 2vw, 14px)', 
+                  lineHeight: '1.6', 
+                  margin: 0, 
+                  fontStyle: 'italic' 
+                }}>
+                  Feedback yükleniyor...
+                </p>
+              )}
+            </div>
+
+            {/* Regional Scores - Only Arms with Average Form Score */}
+            {regionalFeedbacks?.arms && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(0, 204, 255, 0.08) 100%)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                borderRadius: '16px',
+                padding: 'clamp(16px, 3vw, 20px)',
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.1)'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  marginBottom: '12px',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}>
+                  <h3 style={{ 
+                    color: '#fff', 
+                    fontSize: 'clamp(16px, 2.5vw, 18px)',
+                    margin: 0,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    💪 Kollar
+                  </h3>
+                  <div style={{
+                    background: 'rgba(59, 130, 246, 0.2)',
+                    padding: '6px 16px',
+                    borderRadius: '20px',
+                    border: '1px solid rgba(59, 130, 246, 0.4)'
+                  }}>
+                    <span style={{ 
+                      color: '#fff', 
+                      fontSize: 'clamp(16px, 2.5vw, 18px)', 
+                      fontWeight: 'bold',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #00ccff 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text'
+                    }}>
+                      {reps.length > 0
+                        ? (reps.reduce((sum, r) => sum + r.formScore, 0) / reps.length).toFixed(1)
+                        : avgFormScore.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <p style={{ 
+                  color: '#e5e7eb', 
+                  fontSize: 'clamp(14px, 2vw, 15px)', 
+                  margin: 0,
+                  lineHeight: '1.6'
+                }}>
+                  {regionalFeedbacks.arms}
+                </p>
+              </div>
+            )}
+
+            {trainingStatus === 'idle' && (
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: 'clamp(12px, 2vw, 16px)',
+                marginTop: 'auto',
+                paddingTop: '20px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <button
                 onClick={async () => {
                   setTrainingAction('save_only');
                   // Keep WebSocket open for training_action
@@ -1322,40 +1359,89 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                       if (wsRef.current) {
                         wsRef.current.close();
                       }
+                      // Close dialog first
                       setShowTrainingDialog(false);
-                      setState('finished');
+                      // Reset all state
+                      setState('camera_select');
+                      setRepCount(0);
+                      setReps([]);
+                      setSessionFeedback('');
+                      setAvgFormScore(0);
+                      setRegionalScores(null);
+                      setRegionalFeedbacks(null);
+                      setIssues([]);
+                      setFeedbacks([]);
+                      setFormScore(100);
+                      // Don't disconnect IMU - it will be reused for next workout
+                      // Return to exercise selection
+                      setTimeout(() => {
+                        onEnd();
+                      }, 100);
                     }, 500);
                   } else {
-                    // WebSocket already closed, just close dialog
+                    // WebSocket already closed, just close dialog and return
                     setShowTrainingDialog(false);
-                    setState('finished');
+                    // Reset all state
+                    setState('camera_select');
+                    setRepCount(0);
+                    setReps([]);
+                    setSessionFeedback('');
+                    setAvgFormScore(0);
+                    setRegionalScores(null);
+                    setRegionalFeedbacks(null);
+                    setIssues([]);
+                    setFeedbacks([]);
+                    setFormScore(100);
+                    // Don't disconnect IMU - it will be reused for next workout
+                    // Return to exercise selection
+                    setTimeout(() => {
+                      onEnd();
+                    }, 100);
                   }
                 }}
-                style={{
-                  padding: '20px',
-                  background: 'rgba(59, 130, 246, 0.2)',
-                  border: '2px solid #3b82f6',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '18px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s',
-                  textAlign: 'left'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-                }}
-              >
-                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                  💾 Eğitim Setini Kaydet
-                </div>
-                <div style={{ fontSize: '14px', color: '#aaa' }}>
-                  Verileri kaydet. Model eğitimi için train_ml_models.py kullanın (bkz: TRAINING_GUIDE.md)
-                </div>
-              </button>
+                  style={{
+                    padding: 'clamp(16px, 3vw, 20px)',
+                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(0, 204, 255, 0.15) 100%)',
+                    border: '2px solid rgba(59, 130, 246, 0.5)',
+                    borderRadius: '14px',
+                    color: '#fff',
+                    fontSize: 'clamp(16px, 2.5vw, 18px)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    textAlign: 'left',
+                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.35) 0%, rgba(0, 204, 255, 0.25) 100%)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(0, 204, 255, 0.15) 100%)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.2)';
+                  }}
+                >
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: '8px',
+                    fontSize: 'clamp(16px, 2.5vw, 18px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    💾 Eğitim Setini Kaydet
+                  </div>
+                  <div style={{ 
+                    fontSize: 'clamp(13px, 2vw, 14px)', 
+                    color: '#d1d5db',
+                    lineHeight: '1.5'
+                  }}>
+                    Verileri kaydet. Model eğitimi için train_ml_models.py kullanın (bkz: TRAINING_GUIDE.md)
+                  </div>
+                </button>
 
 
               <button
@@ -1372,66 +1458,125 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                       if (wsRef.current) {
                         wsRef.current.close();
                       }
+                      // Close dialog first
                       setShowTrainingDialog(false);
-                      setState('finished');
+                      // Reset all state
+                      setState('camera_select');
+                      setRepCount(0);
+                      setReps([]);
+                      setSessionFeedback('');
+                      setAvgFormScore(0);
+                      setRegionalScores(null);
+                      setRegionalFeedbacks(null);
+                      setIssues([]);
+                      setFeedbacks([]);
+                      setFormScore(100);
+                      // Don't disconnect IMU - it will be reused for next workout
+                      // Return to exercise selection
+                      setTimeout(() => {
+                        onEnd();
+                      }, 100);
                     }, 500);
                   } else {
-                    // WebSocket already closed, just close dialog
+                    // WebSocket already closed, just close dialog and return
                     setShowTrainingDialog(false);
-                    setState('finished');
+                    // Reset all state
+                    setState('camera_select');
+                    setRepCount(0);
+                    setReps([]);
+                    setSessionFeedback('');
+                    setAvgFormScore(0);
+                    setRegionalScores(null);
+                    setRegionalFeedbacks(null);
+                    setIssues([]);
+                    setFeedbacks([]);
+                    setFormScore(100);
+                    // Don't disconnect IMU - it will be reused for next workout
+                    // Return to exercise selection
+                    setTimeout(() => {
+                      onEnd();
+                    }, 100);
                   }
                 }}
-                style={{
-                  padding: '20px',
-                  background: 'rgba(107, 114, 128, 0.2)',
-                  border: '2px solid #6b7280',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '18px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s',
-                  textAlign: 'left'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(107, 114, 128, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(107, 114, 128, 0.2)';
-                }}
-              >
-                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                  ⏭️ Eğitim Setini Direkt Kaydetme
-                </div>
-                <div style={{ fontSize: '14px', color: '#aaa' }}>
-                  Verileri kaydetme, direkt geç
-                </div>
-              </button>
-            </div>
-          )}
+                  style={{
+                    padding: 'clamp(16px, 3vw, 20px)',
+                    background: 'linear-gradient(135deg, rgba(107, 114, 128, 0.2) 0%, rgba(75, 85, 99, 0.15) 100%)',
+                    border: '2px solid rgba(107, 114, 128, 0.4)',
+                    borderRadius: '14px',
+                    color: '#fff',
+                    fontSize: 'clamp(16px, 2.5vw, 18px)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    textAlign: 'left',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(107, 114, 128, 0.3) 0%, rgba(75, 85, 99, 0.25) 100%)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(107, 114, 128, 0.2) 0%, rgba(75, 85, 99, 0.15) 100%)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+                  }}
+                >
+                  <div style={{ 
+                    fontWeight: 'bold', 
+                    marginBottom: '8px',
+                    fontSize: 'clamp(16px, 2.5vw, 18px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    ⏭️ Eğitim Setini Direkt Kaydetme
+                  </div>
+                  <div style={{ 
+                    fontSize: 'clamp(13px, 2vw, 14px)', 
+                    color: '#d1d5db',
+                    lineHeight: '1.5'
+                  }}>
+                    Verileri kaydetme, direkt geç
+                  </div>
+                </button>
+              </div>
+            )}
 
-          {trainingStatus === 'training' && (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>⏳</div>
-              <div style={{ color: '#fff', fontSize: '18px', marginBottom: '10px' }}>
-                Training ML Model...
+            {trainingStatus === 'training' && (
+              <div style={{ textAlign: 'center', padding: 'clamp(20px, 3vw, 30px)' }}>
+                <div style={{ fontSize: 'clamp(40px, 6vw, 48px)', marginBottom: '20px' }}>⏳</div>
+                <div style={{ color: '#fff', fontSize: 'clamp(16px, 2.5vw, 18px)', marginBottom: '10px', fontWeight: 600 }}>
+                  Training ML Model...
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: 'clamp(13px, 2vw, 14px)' }}>
+                  {trainingMessage || 'This may take a few minutes...'}
+                </div>
               </div>
-              <div style={{ color: '#aaa', fontSize: '14px' }}>
-                {trainingMessage || 'This may take a few minutes...'}
-              </div>
-            </div>
-          )}
+            )}
 
-          {trainingStatus === 'completed' && (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>✅</div>
-              <div style={{ color: '#22c55e', fontSize: '18px', marginBottom: '10px', fontWeight: 'bold' }}>
-                İşlem Tamamlandı!
-              </div>
-              
-              {/* Main message */}
-              <div style={{ color: '#fff', fontSize: '14px', marginBottom: '15px', whiteSpace: 'pre-line', textAlign: 'center' }}>
-                {trainingMessage || 'Veriler başarıyla kaydedildi.'}
-              </div>
+            {trainingStatus === 'completed' && (
+              <div style={{ textAlign: 'center', padding: 'clamp(20px, 3vw, 30px)' }}>
+                <div style={{ fontSize: 'clamp(40px, 6vw, 48px)', marginBottom: '20px' }}>✅</div>
+                <div style={{ 
+                  color: '#22c55e', 
+                  fontSize: 'clamp(16px, 2.5vw, 18px)', 
+                  marginBottom: '12px', 
+                  fontWeight: 'bold' 
+                }}>
+                  İşlem Tamamlandı!
+                </div>
+                
+                {/* Main message */}
+                <div style={{ 
+                  color: '#e5e7eb', 
+                  fontSize: 'clamp(13px, 2vw, 14px)', 
+                  marginBottom: '20px', 
+                  whiteSpace: 'pre-line', 
+                  textAlign: 'center',
+                  lineHeight: '1.6'
+                }}>
+                  {trainingMessage || 'Veriler başarıyla kaydedildi.'}
+                </div>
               
               {/* Performance Metrics Box */}
               {performanceMetrics && (
@@ -1489,19 +1634,46 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                 onClick={() => {
                   if (wsRef.current) {
                     wsRef.current.close();
+                    wsRef.current = null; // Clear reference
                   }
+                  // Close dialog first
                   setShowTrainingDialog(false);
-                  setState('finished');
+                  // Reset all state
+                  setState('camera_select');
+                  setRepCount(0);
+                  setReps([]);
+                  setSessionFeedback('');
+                  setAvgFormScore(0);
+                  setRegionalScores(null);
+                  setRegionalFeedbacks(null);
+                  setIssues([]);
+                  setFeedbacks([]);
+                  setFormScore(100);
+                  // Don't disconnect IMU - it will be reused for next workout
+                  // Return to exercise selection
+                  setTimeout(() => {
+                    onEnd();
+                  }, 100);
                 }}
                 style={{
-                  padding: '12px 24px',
-                  background: '#3b82f6',
+                  padding: 'clamp(12px, 2vw, 14px) clamp(20px, 3vw, 24px)',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #00ccff 100%)',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   color: '#fff',
-                  fontSize: '16px',
+                  fontSize: 'clamp(14px, 2vw, 16px)',
                   cursor: 'pointer',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                 }}
               >
                 Tamam
@@ -1509,38 +1681,78 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             </div>
           )}
 
-          {trainingStatus === 'error' && (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '20px' }}>❌</div>
-              <div style={{ color: '#ef4444', fontSize: '18px', marginBottom: '10px' }}>
-                Hata Oluştu
-              </div>
-              <div style={{ color: '#aaa', fontSize: '14px', marginBottom: '20px' }}>
-                {trainingMessage || 'Bir hata oluştu.'}
-              </div>
+            {trainingStatus === 'error' && (
+              <div style={{ textAlign: 'center', padding: 'clamp(20px, 3vw, 30px)' }}>
+                <div style={{ fontSize: 'clamp(40px, 6vw, 48px)', marginBottom: '20px' }}>❌</div>
+                <div style={{ 
+                  color: '#ef4444', 
+                  fontSize: 'clamp(16px, 2.5vw, 18px)', 
+                  marginBottom: '12px',
+                  fontWeight: 600
+                }}>
+                  Hata Oluştu
+                </div>
+                <div style={{ 
+                  color: '#9ca3af', 
+                  fontSize: 'clamp(13px, 2vw, 14px)', 
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  {trainingMessage || 'Bir hata oluştu.'}
+                </div>
               <button
                 onClick={() => {
                   if (wsRef.current) {
                     wsRef.current.close();
+                    wsRef.current = null; // Clear reference
                   }
+                  // Close dialog first
                   setShowTrainingDialog(false);
-                  setState('finished');
+                  // Reset all state
+                  setState('camera_select');
+                  setRepCount(0);
+                  setReps([]);
+                  setSessionFeedback('');
+                  setAvgFormScore(0);
+                  setRegionalScores(null);
+                  setRegionalFeedbacks(null);
+                  setIssues([]);
+                  setFeedbacks([]);
+                  setFormScore(100);
+                  // Don't disconnect IMU - it will be reused for next workout
+                  // Return to exercise selection
+                  setTimeout(() => {
+                    onEnd();
+                  }, 100);
                 }}
                 style={{
-                  padding: '12px 24px',
+                  padding: 'clamp(12px, 2vw, 14px) clamp(20px, 3vw, 24px)',
                   background: '#ef4444',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   color: '#fff',
-                  fontSize: '16px',
+                  fontSize: 'clamp(14px, 2vw, 16px)',
                   cursor: 'pointer',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#dc2626';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#ef4444';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
                 }}
               >
                 Kapat
               </button>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </motion.div>
       </div>
     );
@@ -1828,8 +2040,29 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
         </div>
       </div>
 
-      <div className="main-content">
-        <div className={`video-avatar-container ${fusionMode === 'imu_only' ? 'imu-only-mode' : ''}`}>
+      <div className="main-content" style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 'clamp(16px, 2vw, 24px)',
+        padding: 'clamp(12px, 2vw, 20px)',
+        height: '100%',
+        overflow: 'hidden'
+      }}>
+        {/* LEFT COLUMN: 3D Grid + IMU Activity Monitor */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'clamp(12px, 2vw, 16px)',
+          overflow: 'hidden'
+        }}>
+          {/* 3D Avatar/Grid */}
+          <div className={`video-avatar-container ${fusionMode === 'imu_only' ? 'imu-only-mode' : ''}`} style={{
+            flex: '1 1 auto',
+            minHeight: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
           {/* Camera View - Hidden in IMU-only mode */}
           {fusionMode !== 'imu_only' && (
             <div className="video-container">
@@ -1839,11 +2072,22 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
           )}
           
           {/* 3D Avatar with IMU Fusion */}
-          <div className="avatar-wrapper">
+          <div 
+            ref={avatarWrapperRef}
+            className="avatar-wrapper" 
+            style={{
+              width: '100%',
+              maxWidth: fusionMode === 'imu_only' ? 'min(90vw, 600px)' : '400px',
+              aspectRatio: '4/3',
+              height: 'auto',
+              transition: 'all 0.3s ease',
+              margin: '0 auto'
+            }}
+          >
             <HumanAvatar 
               landmarks={currentLandmarks} 
-              width={400} 
-              height={480} 
+              width={avatarSize.width} 
+              height={avatarSize.height} 
               modelUrl={avatarUrl}
               showSkeleton={true}
               isCalibrated={state === 'ready' || state === 'countdown' || state === 'tracking'}
@@ -1859,24 +2103,36 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             </div>
           </div>
         </div>
-        
-        {/* Fusion Mode Toggle */}
-        <div style={{
-          display: 'flex',
-          gap: '10px',
-          justifyContent: 'center',
-          marginTop: '10px'
-        }}>
+          
+          {/* Fusion Mode Toggle */}
+          <div style={{
+            display: 'flex',
+            gap: 'clamp(6px, 1.5vw, 10px)',
+            justifyContent: 'center',
+            flexWrap: 'wrap'
+          }}>
           <button
             onClick={() => setFusionMode('camera_only')}
             style={{
-              padding: '8px 16px',
+              padding: 'clamp(6px, 1.5vw, 8px) clamp(12px, 2vw, 16px)',
               background: fusionMode === 'camera_only' ? '#3b82f6' : '#333',
               border: 'none',
               borderRadius: '20px',
               color: 'white',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: 'clamp(10px, 1.5vw, 12px)',
+              transition: 'all 0.2s',
+              fontWeight: 500
+            }}
+            onMouseEnter={(e) => {
+              if (fusionMode !== 'camera_only') {
+                e.currentTarget.style.background = '#444';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (fusionMode !== 'camera_only') {
+                e.currentTarget.style.background = '#333';
+              }
             }}
           >
             📷 Camera Only
@@ -1884,13 +2140,25 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
           <button
             onClick={() => setFusionMode('camera_primary')}
             style={{
-              padding: '8px 16px',
+              padding: 'clamp(6px, 1.5vw, 8px) clamp(12px, 2vw, 16px)',
               background: fusionMode === 'camera_primary' ? '#3b82f6' : '#333',
               border: 'none',
               borderRadius: '20px',
               color: 'white',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: 'clamp(10px, 1.5vw, 12px)',
+              transition: 'all 0.2s',
+              fontWeight: 500
+            }}
+            onMouseEnter={(e) => {
+              if (fusionMode !== 'camera_primary') {
+                e.currentTarget.style.background = '#444';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (fusionMode !== 'camera_primary') {
+                e.currentTarget.style.background = '#333';
+              }
             }}
           >
             🔄 Fusion
@@ -1898,13 +2166,25 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
           <button
             onClick={() => setFusionMode('imu_only')}
             style={{
-              padding: '8px 16px',
+              padding: 'clamp(6px, 1.5vw, 8px) clamp(12px, 2vw, 16px)',
               background: fusionMode === 'imu_only' ? '#3b82f6' : '#333',
               border: 'none',
               borderRadius: '20px',
               color: 'white',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: 'clamp(10px, 1.5vw, 12px)',
+              transition: 'all 0.2s',
+              fontWeight: 500
+            }}
+            onMouseEnter={(e) => {
+              if (fusionMode !== 'imu_only') {
+                e.currentTarget.style.background = '#444';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (fusionMode !== 'imu_only') {
+                e.currentTarget.style.background = '#333';
+              }
             }}
           >
             🎛️ IMU Only
@@ -1912,15 +2192,25 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
           <button
             onClick={resetOrientation}
             style={{
-              padding: '8px 16px',
+              padding: 'clamp(6px, 1.5vw, 8px) clamp(12px, 2vw, 16px)',
               background: '#6b21a8',
               border: 'none',
               borderRadius: '20px',
               color: 'white',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: 'clamp(10px, 1.5vw, 12px)',
+              transition: 'all 0.2s',
+              fontWeight: 500
             }}
             title="Reset IMU orientation"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#7c3aed';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#6b21a8';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
           >
             🔄 Reset IMU
           </button>
@@ -1928,8 +2218,9 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             display: 'flex',
             alignItems: 'center',
             gap: '5px',
-            fontSize: '12px',
-            color: '#888'
+            fontSize: 'clamp(10px, 1.5vw, 12px)',
+            color: '#888',
+            cursor: 'pointer'
           }}>
             <input
               type="checkbox"
@@ -1938,20 +2229,22 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             />
             Debug
           </label>
-        </div>
-        
-        {/* Real-time IMU Activity Panel (during workout) */}
-        {showIMUDebug && imuConnected && (
-          <div style={{
-            margin: '10px auto',
-            maxWidth: '600px',
-            background: 'rgba(0, 0, 0, 0.8)',
-            border: '1px solid #22c55e',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            fontFamily: 'monospace',
-            fontSize: '11px'
-          }}>
+          </div>
+          
+          {/* Real-time IMU Activity Panel (during workout) */}
+          {showIMUDebug && imuConnected && (
+            <div style={{
+              width: '100%',
+              background: 'rgba(0, 0, 0, 0.8)',
+              border: '1px solid #22c55e',
+              borderRadius: '12px',
+              padding: 'clamp(10px, 2vw, 12px) clamp(12px, 2.5vw, 16px)',
+              fontFamily: 'monospace',
+              fontSize: 'clamp(9px, 1.5vw, 11px)',
+              boxShadow: '0 4px 12px rgba(34, 197, 94, 0.2)',
+              maxHeight: '40vh',
+              overflowY: 'auto'
+            }}>
             <div style={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
@@ -1960,61 +2253,171 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
               paddingBottom: '8px',
               borderBottom: '1px solid #333'
             }}>
-              <span style={{ color: '#22c55e', fontWeight: 'bold' }}>📊 IMU Activity Monitor</span>
-              <span style={{ color: '#888' }}>{imuSampleRate.toFixed(0)} Hz</span>
+              <span style={{ 
+                color: '#22c55e', 
+                fontWeight: 'bold',
+                fontSize: 'clamp(11px, 1.8vw, 13px)'
+              }}>📊 IMU Activity Monitor</span>
+              <span style={{ 
+                color: '#888',
+                fontSize: 'clamp(10px, 1.5vw, 12px)'
+              }}>{imuSampleRate.toFixed(0)} Hz</span>
             </div>
-            <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: 'clamp(12px, 3vw, 20px)', 
+              justifyContent: 'space-between', 
+              flexWrap: 'wrap' 
+            }}>
               {/* Left Wrist */}
-              <div style={{ flex: 1, textAlign: 'center', minWidth: '200px' }}>
-                <div style={{ color: '#3b82f6', marginBottom: '8px', fontWeight: 'bold' }}>🤚 Left Wrist (LW)</div>
+              <div style={{ 
+                flex: '1 1 min(100%, 280px)', 
+                textAlign: 'center', 
+                minWidth: 'min(100%, 200px)',
+                padding: '8px',
+                background: 'rgba(59, 130, 246, 0.05)',
+                borderRadius: '8px',
+                border: '1px solid rgba(59, 130, 246, 0.2)'
+              }}>
+                <div style={{ 
+                  color: '#3b82f6', 
+                  marginBottom: '8px', 
+                  fontWeight: 'bold',
+                  fontSize: 'clamp(10px, 1.8vw, 12px)'
+                }}>🤚 Left Wrist (LW)</div>
                 
                 {/* Orientation (Euler) */}
-                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Orientation:</div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  padding: 'clamp(4px, 1vw, 6px)', 
+                  background: 'rgba(59, 130, 246, 0.1)', 
+                  borderRadius: '6px',
+                  transition: 'background 0.2s'
+                }}>
+                  <div style={{ 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                    color: '#888', 
+                    marginBottom: '4px',
+                    fontWeight: 600
+                  }}>Orientation:</div>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Roll: {leftWrist ? leftWrist.euler.roll.toFixed(1) : '--'}°
                   </div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Pitch: {leftWrist ? leftWrist.euler.pitch.toFixed(1) : '--'}°
                   </div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Yaw: {leftWrist ? leftWrist.euler.yaw.toFixed(1) : '--'}°
                   </div>
                 </div>
                 
                 {/* Accelerometer (XYZ) */}
-                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Accel (g):</div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  padding: 'clamp(4px, 1vw, 6px)', 
+                  background: 'rgba(34, 197, 94, 0.1)', 
+                  borderRadius: '6px',
+                  transition: 'background 0.2s'
+                }}>
+                  <div style={{ 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                    color: '#888', 
+                    marginBottom: '4px',
+                    fontWeight: 600
+                  }}>Accel (g):</div>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     X: {leftWrist ? leftWrist.accel.x.toFixed(2) : '--'}
                   </div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Y: {leftWrist ? leftWrist.accel.y.toFixed(2) : '--'}
                   </div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Z: {leftWrist ? leftWrist.accel.z.toFixed(2) : '--'}
                   </div>
                 </div>
                 
                 {/* Gyroscope (XYZ) */}
-                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(249, 115, 22, 0.1)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Gyro (deg/s):</div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  padding: 'clamp(4px, 1vw, 6px)', 
+                  background: 'rgba(249, 115, 22, 0.1)', 
+                  borderRadius: '6px',
+                  transition: 'background 0.2s'
+                }}>
+                  <div style={{ 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                    color: '#888', 
+                    marginBottom: '4px',
+                    fontWeight: 600
+                  }}>Gyro (deg/s):</div>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     X: {leftWrist ? leftWrist.gyro.x.toFixed(1) : '--'}
                   </div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Y: {leftWrist ? leftWrist.gyro.y.toFixed(1) : '--'}
                   </div>
-                  <div style={{ color: leftWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: leftWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Z: {leftWrist ? leftWrist.gyro.z.toFixed(1) : '--'}
                   </div>
                 </div>
                 
                 {/* Unit Vectors */}
                 {leftWrist?.unit_vectors && (
-                  <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Unit Vectors:</div>
-                    <div style={{ color: '#fff', fontSize: '9px' }}>
+                  <div style={{ 
+                    marginBottom: '8px', 
+                    padding: 'clamp(4px, 1vw, 6px)', 
+                    background: 'rgba(168, 85, 247, 0.1)', 
+                    borderRadius: '6px',
+                    transition: 'background 0.2s'
+                  }}>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      color: '#888', 
+                      marginBottom: '4px',
+                      fontWeight: 600
+                    }}>Unit Vectors:</div>
+                    <div style={{ 
+                      color: '#fff', 
+                      fontSize: 'clamp(8px, 1.2vw, 9px)',
+                      lineHeight: '1.4',
+                      fontFamily: 'monospace'
+                    }}>
                       <div>Normal: ({leftWrist.unit_vectors.normal.x.toFixed(2)}, {leftWrist.unit_vectors.normal.y.toFixed(2)}, {leftWrist.unit_vectors.normal.z.toFixed(2)})</div>
                       <div>Tangent: ({leftWrist.unit_vectors.tangent.x.toFixed(2)}, {leftWrist.unit_vectors.tangent.y.toFixed(2)}, {leftWrist.unit_vectors.tangent.z.toFixed(2)})</div>
                       <div>Binormal: ({leftWrist.unit_vectors.binormal.x.toFixed(2)}, {leftWrist.unit_vectors.binormal.y.toFixed(2)}, {leftWrist.unit_vectors.binormal.z.toFixed(2)})</div>
@@ -2024,56 +2427,154 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
               </div>
               
               {/* Right Wrist */}
-              <div style={{ flex: 1, textAlign: 'center', minWidth: '200px' }}>
-                <div style={{ color: '#a855f7', marginBottom: '8px', fontWeight: 'bold' }}>✋ Right Wrist (RW)</div>
+              <div style={{ 
+                flex: '1 1 min(100%, 280px)', 
+                textAlign: 'center', 
+                minWidth: 'min(100%, 200px)',
+                padding: '8px',
+                background: 'rgba(168, 85, 247, 0.05)',
+                borderRadius: '8px',
+                border: '1px solid rgba(168, 85, 247, 0.2)'
+              }}>
+                <div style={{ 
+                  color: '#a855f7', 
+                  marginBottom: '8px', 
+                  fontWeight: 'bold',
+                  fontSize: 'clamp(10px, 1.8vw, 12px)'
+                }}>✋ Right Wrist (RW)</div>
                 
                 {/* Orientation (Euler) */}
-                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Orientation:</div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  padding: 'clamp(4px, 1vw, 6px)', 
+                  background: 'rgba(168, 85, 247, 0.1)', 
+                  borderRadius: '6px',
+                  transition: 'background 0.2s'
+                }}>
+                  <div style={{ 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                    color: '#888', 
+                    marginBottom: '4px',
+                    fontWeight: 600
+                  }}>Orientation:</div>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Roll: {rightWrist ? rightWrist.euler.roll.toFixed(1) : '--'}°
                   </div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Pitch: {rightWrist ? rightWrist.euler.pitch.toFixed(1) : '--'}°
                   </div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Yaw: {rightWrist ? rightWrist.euler.yaw.toFixed(1) : '--'}°
                   </div>
                 </div>
                 
                 {/* Accelerometer (XYZ) */}
-                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Accel (g):</div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  padding: 'clamp(4px, 1vw, 6px)', 
+                  background: 'rgba(34, 197, 94, 0.1)', 
+                  borderRadius: '6px',
+                  transition: 'background 0.2s'
+                }}>
+                  <div style={{ 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                    color: '#888', 
+                    marginBottom: '4px',
+                    fontWeight: 600
+                  }}>Accel (g):</div>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     X: {rightWrist ? rightWrist.accel.x.toFixed(2) : '--'}
                   </div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Y: {rightWrist ? rightWrist.accel.y.toFixed(2) : '--'}
                   </div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Z: {rightWrist ? rightWrist.accel.z.toFixed(2) : '--'}
                   </div>
                 </div>
                 
                 {/* Gyroscope (XYZ) */}
-                <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(249, 115, 22, 0.1)', borderRadius: '4px' }}>
-                  <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Gyro (deg/s):</div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                <div style={{ 
+                  marginBottom: '8px', 
+                  padding: 'clamp(4px, 1vw, 6px)', 
+                  background: 'rgba(249, 115, 22, 0.1)', 
+                  borderRadius: '6px',
+                  transition: 'background 0.2s'
+                }}>
+                  <div style={{ 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                    color: '#888', 
+                    marginBottom: '4px',
+                    fontWeight: 600
+                  }}>Gyro (deg/s):</div>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     X: {rightWrist ? rightWrist.gyro.x.toFixed(1) : '--'}
                   </div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Y: {rightWrist ? rightWrist.gyro.y.toFixed(1) : '--'}
                   </div>
-                  <div style={{ color: rightWrist ? '#fff' : '#666', fontSize: '10px' }}>
+                  <div style={{ 
+                    color: rightWrist ? '#fff' : '#666', 
+                    fontSize: 'clamp(9px, 1.3vw, 10px)',
+                    lineHeight: '1.4'
+                  }}>
                     Z: {rightWrist ? rightWrist.gyro.z.toFixed(1) : '--'}
                   </div>
                 </div>
                 
                 {/* Unit Vectors */}
                 {rightWrist?.unit_vectors && (
-                  <div style={{ marginBottom: '8px', padding: '4px', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '2px' }}>Unit Vectors:</div>
-                    <div style={{ color: '#fff', fontSize: '9px' }}>
+                  <div style={{ 
+                    marginBottom: '8px', 
+                    padding: 'clamp(4px, 1vw, 6px)', 
+                    background: 'rgba(168, 85, 247, 0.1)', 
+                    borderRadius: '6px',
+                    transition: 'background 0.2s'
+                  }}>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      color: '#888', 
+                      marginBottom: '4px',
+                      fontWeight: 600
+                    }}>Unit Vectors:</div>
+                    <div style={{ 
+                      color: '#fff', 
+                      fontSize: 'clamp(8px, 1.2vw, 9px)',
+                      lineHeight: '1.4',
+                      fontFamily: 'monospace'
+                    }}>
                       <div>Normal: ({rightWrist.unit_vectors.normal.x.toFixed(2)}, {rightWrist.unit_vectors.normal.y.toFixed(2)}, {rightWrist.unit_vectors.normal.z.toFixed(2)})</div>
                       <div>Tangent: ({rightWrist.unit_vectors.tangent.x.toFixed(2)}, {rightWrist.unit_vectors.tangent.y.toFixed(2)}, {rightWrist.unit_vectors.tangent.z.toFixed(2)})</div>
                       <div>Binormal: ({rightWrist.unit_vectors.binormal.x.toFixed(2)}, {rightWrist.unit_vectors.binormal.y.toFixed(2)}, {rightWrist.unit_vectors.binormal.z.toFixed(2)})</div>
@@ -2084,9 +2585,107 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             </div>
           </div>
         )}
+        </div>
         
-        {/* Stats Overlay */}
-        <div className="stats-bar">
+        {/* RIGHT COLUMN: Rep Details + Feedback */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'clamp(12px, 2vw, 16px)',
+          overflow: 'hidden',
+          height: '100%'
+        }}>
+          {/* Rep List */}
+          {reps.length > 0 && (
+            <div style={{
+              padding: 'clamp(12px, 2vw, 16px)',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              maxHeight: '50vh',
+              overflowY: 'auto',
+              flex: '1 1 auto'
+            }}>
+              <h3 style={{ 
+                fontSize: 'clamp(0.9rem, 2vw, 1rem)', 
+                fontWeight: 600, 
+                marginBottom: '12px', 
+                color: '#fff' 
+              }}>
+                📊 Rep Detayları
+              </h3>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <AnimatePresence>
+                  {reps.map((rep, index) => (
+                    <motion.div
+                      key={rep.repNumber || index}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0 }}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px',
+                        background: rep.formScore >= 80 
+                          ? 'rgba(34, 197, 94, 0.15)' 
+                          : rep.formScore >= 60 
+                          ? 'rgba(234, 179, 8, 0.15)' 
+                          : 'rgba(239, 68, 68, 0.15)',
+                        borderRadius: '8px',
+                        border: `1px solid ${
+                          rep.formScore >= 80 
+                            ? 'rgba(34, 197, 94, 0.3)' 
+                            : rep.formScore >= 60 
+                            ? 'rgba(234, 179, 8, 0.3)' 
+                            : 'rgba(239, 68, 68, 0.3)'
+                        }`
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, flexWrap: 'wrap' }}>
+                        <span style={{ 
+                          fontSize: 'clamp(11px, 1.5vw, 13px)', 
+                          fontWeight: 600,
+                          color: '#9ca3af',
+                          minWidth: '50px'
+                        }}>
+                          Rep #{rep.repNumber}
+                        </span>
+                        <div style={{
+                          fontSize: 'clamp(14px, 2vw, 16px)',
+                          fontWeight: 'bold',
+                          color: rep.formScore >= 80 ? '#22c55e' : rep.formScore >= 60 ? '#eab308' : '#ef4444',
+                          minWidth: '45px'
+                        }}>
+                          {rep.formScore.toFixed(0)}%
+                        </div>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: 'clamp(10px, 1.3vw, 12px)',
+                          color: '#9ca3af'
+                        }}>
+                          <span>{rep.speedEmoji || '⚡'}</span>
+                          <span>{rep.speedLabel || 'Normal'}</span>
+                          <span style={{ color: '#6b7280' }}>({rep.duration?.toFixed(1) || '0.0'}s)</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
+          
+          {/* Stats Overlay */}
+          <div className="stats-bar" style={{
+            marginTop: 'auto'
+          }}>
           <div className="stat-item">
             <span className="stat-value">Set: {currentSet}/{numberOfSets}</span>
             <span className="stat-label">SET</span>
@@ -2109,9 +2708,9 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             <span className="stat-value">{currentAngle.toFixed(0)}°</span>
             <span className="stat-label">{(phase || 'down').toUpperCase()}</span>
           </div>
-        </div>
+          </div>
 
-        {/* Issues display */}
+          {/* Issues display */}
           <AnimatePresence>
             {issues.length > 0 && (
               <motion.div
@@ -2129,78 +2728,73 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             )}
           </AnimatePresence>
 
-        {/* AI Feedback panel */}
-          <div className="feedback-panel">
-            <h3>🤖 AI Feedback</h3>
-            <div className="feedback-list">
-              <AnimatePresence>
-                {feedbacks.slice(-5).map((fb, i) => (
-                  <motion.div
-                    key={i}
-                    className={`feedback-item ${fb.type}`}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    {fb.message}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-
+          {/* AI Feedback panel - Tips and Regional Feedback */}
+          <div className="feedback-panel" style={{
+            maxHeight: '30vh',
+            overflowY: 'auto'
+          }}>
             {/* Regional Feedback */}
             {regionalFeedbacks && (
               <div className="regional-feedback" style={{
-                marginTop: '20px',
-                padding: '15px',
+                marginTop: 'clamp(12px, 2vw, 20px)',
+                padding: 'clamp(12px, 2vw, 15px)',
                 background: 'rgba(255, 255, 255, 0.03)',
                 borderRadius: '12px',
                 border: '1px solid rgba(255, 255, 255, 0.1)'
               }}>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '12px', color: '#fff' }}>
+                <h4 style={{ 
+                  fontSize: 'clamp(0.8rem, 2vw, 0.875rem)', 
+                  fontWeight: 600, 
+                  marginBottom: '12px', 
+                  color: '#fff' 
+                }}>
                   📍 Bölgesel Feedback
                 </h4>
-                <div style={{ display: 'grid', gap: '10px' }}>
+                <div style={{ display: 'grid', gap: 'clamp(8px, 1.5vw, 10px)' }}>
                   {regionalFeedbacks.arms && (
                     <div style={{
-                      padding: '10px',
+                      padding: 'clamp(8px, 1.5vw, 10px)',
                       background: 'rgba(59, 130, 246, 0.1)',
                       borderRadius: '8px',
                       borderLeft: '3px solid #3b82f6',
-                      fontSize: '0.8rem'
+                      fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
+                      lineHeight: '1.5'
                     }}>
                       <strong style={{ color: '#3b82f6' }}>💪 Kollar:</strong> {regionalFeedbacks.arms}
                     </div>
                   )}
                   {regionalFeedbacks.legs && (
                     <div style={{
-                      padding: '10px',
+                      padding: 'clamp(8px, 1.5vw, 10px)',
                       background: 'rgba(168, 85, 247, 0.1)',
                       borderRadius: '8px',
                       borderLeft: '3px solid #a855f7',
-                      fontSize: '0.8rem'
+                      fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
+                      lineHeight: '1.5'
                     }}>
                       <strong style={{ color: '#a855f7' }}>🦵 Bacaklar:</strong> {regionalFeedbacks.legs}
                     </div>
                   )}
                   {regionalFeedbacks.core && (
                     <div style={{
-                      padding: '10px',
+                      padding: 'clamp(8px, 1.5vw, 10px)',
                       background: 'rgba(249, 115, 22, 0.1)',
                       borderRadius: '8px',
                       borderLeft: '3px solid #f97316',
-                      fontSize: '0.8rem'
+                      fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
+                      lineHeight: '1.5'
                     }}>
                       <strong style={{ color: '#f97316' }}>🏋️ Gövde:</strong> {regionalFeedbacks.core}
                     </div>
                   )}
                   {regionalFeedbacks.head && (
                     <div style={{
-                      padding: '10px',
+                      padding: 'clamp(8px, 1.5vw, 10px)',
                       background: 'rgba(34, 197, 94, 0.1)',
                       borderRadius: '8px',
                       borderLeft: '3px solid #22c55e',
-                      fontSize: '0.8rem'
+                      fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
+                      lineHeight: '1.5'
                     }}>
                       <strong style={{ color: '#22c55e' }}>👤 Kafa:</strong> {regionalFeedbacks.head}
                     </div>
@@ -2218,22 +2812,29 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
               ))}
             </div>
           </div>
-
-        {/* Debug Panel */}
-        <div className="debug-panel">
-          <h4>🔧 Debug Logs</h4>
-          <div className="debug-info">
-            <span>State: <b>{state}</b></span>
-            <span>Camera: <b>{selectedCamera ? 'Selected' : 'None'}</b></span>
-            <span>WS: <b>{wsRef.current?.readyState === 1 ? 'Open' : 'Closed'}</b></span>
-            <span>IMU: <b>{imuConnected ? 'Connected' : 'Disconnected'}</b></span>
-            <span>Fusion: <b>{fusionMode}</b></span>
-          </div>
-          <div className="debug-logs">
-            {debugLogs.map((log, i) => (
-              <div key={i} className="log-line">{log}</div>
-            ))}
-          </div>
+          
+          {/* Debug Panel */}
+          {showIMUDebug && (
+            <div className="debug-panel" style={{
+              maxHeight: '20vh',
+              overflowY: 'auto',
+              marginTop: 'clamp(12px, 2vw, 16px)'
+            }}>
+              <h4>🔧 Debug Logs</h4>
+              <div className="debug-info">
+                <span>State: <b>{state}</b></span>
+                <span>Camera: <b>{selectedCamera ? 'Selected' : 'None'}</b></span>
+                <span>WS: <b>{wsRef.current?.readyState === 1 ? 'Open' : 'Closed'}</b></span>
+                <span>IMU: <b>{imuConnected ? 'Connected' : 'Disconnected'}</b></span>
+                <span>Fusion: <b>{fusionMode}</b></span>
+              </div>
+              <div className="debug-logs">
+                {debugLogs.map((log, i) => (
+                  <div key={i} className="log-line">{log}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
