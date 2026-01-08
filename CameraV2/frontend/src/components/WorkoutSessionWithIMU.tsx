@@ -435,6 +435,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
         console.log('   Feedback:', data.feedback);
         console.log('   Regional scores:', data.regional_scores);
         console.log('   Regional feedback:', data.regional_feedback);
+        console.log('   Rep list:', data.rep_list);
         
         // Set feedback immediately
         if (data.feedback) {
@@ -448,6 +449,24 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
         setRepCount(data.total_reps);
         setAvgFormScore(data.avg_form || 0);
         setRegionalScores(data.regional_scores || null);
+        
+        // Set rep list if provided
+        if (data.rep_list && Array.isArray(data.rep_list)) {
+          // Convert rep_list to RepData format
+          const repDataList: RepData[] = data.rep_list.map((rep: any) => ({
+            repNumber: rep.rep_number || 0,
+            formScore: rep.form_score || 0,
+            duration: rep.duration || 0,
+            speedClass: rep.speed_class || 'medium',
+            speedLabel: rep.speed_label || 'Orta Hız',
+            speedEmoji: rep.speed_emoji || '✅',
+            isValid: rep.is_valid !== false,
+            issues: rep.issues || [],
+            regionalScores: rep.regional_scores || {}
+          }));
+          setReps(repDataList);
+          console.log('✅ Rep list set:', repDataList.length, 'reps');
+        }
         
         // Set regional feedback if provided
         if (data.regional_feedback) {
@@ -1527,6 +1546,182 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
     );
   }
 
+  // Session finished screen
+  if (state === 'finished') {
+    return (
+      <div className="session-finished">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="finish-card"
+        >
+          <h1>🎉 Congratulations!</h1>
+          <div className="stats">
+            <div className="stat">
+              <span className="value">{repCount}</span>
+              <span className="label">Reps</span>
+            </div>
+            <div className="stat">
+              <span className="value">
+                {reps.length > 0
+                  ? (reps.reduce((sum, r) => sum + r.formScore, 0) / reps.length).toFixed(0)
+                  : avgFormScore.toFixed(0)}
+                %
+              </span>
+              <span className="label">Avg. Form</span>
+            </div>
+          </div>
+
+          {/* Arms Feedback */}
+          {regionalFeedbacks?.arms && (
+            <div className="arms-feedback" style={{
+              background: 'rgba(59, 130, 246, 0.1)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '24px',
+              textAlign: 'left'
+            }}>
+              <h3 style={{ 
+                fontSize: '1rem', 
+                fontWeight: 600, 
+                marginBottom: '8px',
+                color: '#3b82f6',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                💪 Kollar Feedback
+              </h3>
+              <p style={{ 
+                fontSize: '0.9375rem', 
+                lineHeight: '1.6', 
+                color: '#e5e7eb',
+                margin: 0
+              }}>
+                {regionalFeedbacks.arms}
+              </p>
+            </div>
+          )}
+
+          {/* Rep List */}
+          {reps.length > 0 && (
+            <div className="rep-list" style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '16px',
+              padding: '20px',
+              marginBottom: '24px',
+              maxHeight: '400px',
+              overflowY: 'auto'
+            }}>
+              <h3 style={{
+                fontSize: '1rem',
+                fontWeight: 600,
+                marginBottom: '16px',
+                color: '#fff',
+                textAlign: 'left'
+              }}>
+                📊 Rep Detayları
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {reps.map((rep, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                      <span style={{ 
+                        fontSize: '0.875rem', 
+                        fontWeight: 600,
+                        color: '#9ca3af',
+                        minWidth: '50px'
+                      }}>
+                        Rep #{rep.repNumber}
+                      </span>
+                      <div style={{
+                        fontSize: '1.25rem',
+                        fontWeight: 'bold',
+                        color: rep.formScore >= 80 ? '#22c55e' : rep.formScore >= 60 ? '#eab308' : '#ef4444',
+                        minWidth: '50px'
+                      }}>
+                        {rep.formScore.toFixed(0)}%
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '0.875rem',
+                        color: '#9ca3af'
+                      }}>
+                        <span>{rep.speedEmoji}</span>
+                        <span>{rep.speedLabel}</span>
+                        <span style={{ color: '#6b7280' }}>({rep.duration.toFixed(1)}s)</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="ai-feedback">
+            <h3>🤖 AI Coach Feedback</h3>
+            {sessionFeedback ? (
+              <p>{sessionFeedback}</p>
+            ) : (
+              <p>Loading feedback...</p>
+            )}
+          </div>
+
+          <button className="back-button" onClick={() => {
+            // Close WebSocket if open
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              try {
+                wsRef.current.close();
+              } catch (e) {
+                console.error('Error closing WebSocket:', e);
+              }
+            }
+            
+            // Disconnect IMU
+            try {
+              disconnectIMU();
+            } catch (e) {
+              console.error('Error disconnecting IMU:', e);
+            }
+            
+            // Reset all state
+            setState('camera_select');
+            setRepCount(0);
+            setReps([]);
+            setSessionFeedback('');
+            setAvgFormScore(0);
+            setRegionalScores(null);
+            setRegionalFeedbacks(null);
+            setIssues([]);
+            setFeedbacks([]);
+            setFormScore(100);
+            
+            // Call onEnd to return to exercise selection
+            setTimeout(() => {
+              onEnd();
+            }, 100);
+          }}>
+            ← Back to Exercise Selection
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
   // Rest overlay for resting state
   const restOverlay = state === 'resting' && restCountdown > 0 ? (
     <div style={{
@@ -1634,12 +1829,14 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
       </div>
 
       <div className="main-content">
-        <div className="video-avatar-container">
-          {/* Camera View */}
-          <div className="video-container">
-            <video ref={videoRef} autoPlay playsInline style={{ display: 'none' }} />
-            <canvas ref={canvasRef} width={640} height={480} />
-          </div>
+        <div className={`video-avatar-container ${fusionMode === 'imu_only' ? 'imu-only-mode' : ''}`}>
+          {/* Camera View - Hidden in IMU-only mode */}
+          {fusionMode !== 'imu_only' && (
+            <div className="video-container">
+              <video ref={videoRef} autoPlay playsInline style={{ display: 'none' }} />
+              <canvas ref={canvasRef} width={640} height={480} />
+            </div>
+          )}
           
           {/* 3D Avatar with IMU Fusion */}
           <div className="avatar-wrapper">

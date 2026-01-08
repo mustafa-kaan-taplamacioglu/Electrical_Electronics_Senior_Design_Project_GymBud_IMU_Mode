@@ -441,6 +441,70 @@ async def get_regional_ai_feedback(
     
 
 
+def get_imu_only_bicep_curl_feedback(
+    exercise: str,
+    score: float,
+    imu_analysis: dict,
+    rep_num: int = 0,
+    rep_duration: float = 0.0
+) -> str:
+    """
+    IMU-only mode için biceps curl feedback.
+    Sadece IMU analizlerini kullanır.
+    """
+    feedback_parts = []
+    
+    # 1. Temel skor feedback
+    if score >= 95:
+        feedback_parts.append("🎉 Mükemmel biceps curl!")
+    elif score >= 85:
+        feedback_parts.append("💪 Çok iyi form!")
+    elif score >= 70:
+        feedback_parts.append("👍 İyi gidiyorsun!")
+    else:
+        feedback_parts.append("⚠️ Formunu iyileştir.")
+    
+    # 2. Sol bilek analizi
+    lw = imu_analysis.get('left_wrist', {})
+    if lw.get('pitch_feedback'):
+        feedback_parts.append(lw['pitch_feedback'])
+    
+    if lw.get('roll_status') == 'excessive':
+        feedback_parts.append(lw.get('roll_feedback', ''))
+    
+    if lw.get('gyro_status') == 'too_fast':
+        feedback_parts.append(lw.get('gyro_feedback', ''))
+    
+    # 3. Sağ bilek analizi
+    rw = imu_analysis.get('right_wrist', {})
+    if rw.get('pitch_feedback'):
+        feedback_parts.append(rw['pitch_feedback'])
+    
+    if rw.get('roll_status') == 'excessive':
+        feedback_parts.append(rw.get('roll_feedback', ''))
+    
+    # 4. Bilateral simetri
+    symmetry = imu_analysis.get('bilateral_symmetry', {})
+    if symmetry.get('feedback'):
+        feedback_parts.append(symmetry['feedback'])
+    
+    # 5. Tempo
+    tempo = imu_analysis.get('movement_quality', {}).get('tempo', {})
+    if tempo.get('feedback'):
+        feedback_parts.append(tempo['feedback'])
+    
+    # 6. Bilimsel gerçekler
+    if score >= 85:
+        feedback_parts.append("🔬 Bilimsel: ROM optimal! Biceps brachii tam aktivasyonda.")
+    elif score < 70:
+        feedback_parts.append("🔬 Bilimsel: ROM yetersiz. 120-150° aralığı hedefle.")
+    
+    result = " | ".join([f for f in feedback_parts if f])
+    if rep_num > 0:
+        return f"Rep #{rep_num}: {result}"
+    return result if result else "Form analizi yapılıyor..."
+
+
 def get_rule_based_overall_feedback(
     exercise: str,
     rep_num: int,
@@ -455,13 +519,24 @@ def get_rule_based_overall_feedback(
     imu_data: dict = None,
     landmarks: list = None,
     initial_positions: dict = None,
-    fusion_mode: str = 'camera_primary'
+    fusion_mode: str = 'camera_primary',
+    imu_analysis: dict = None
 ) -> str:
     """Get rule-based overall feedback using MediaPipe data, ML predictions, IMU data, and landmarks."""
     if not is_valid:
         if issues:
             return f"Rep #{rep_num}: Geçersiz rep. {issues[0] if issues else 'Form hatası'}."
         return f"Rep #{rep_num}: Geçersiz rep, formunu düzelt."
+    
+    # IMU-only mode için özel feedback
+    if fusion_mode == 'imu_only' and exercise == 'bicep_curls' and imu_analysis:
+        return get_imu_only_bicep_curl_feedback(
+            exercise=exercise,
+            score=score,
+            imu_analysis=imu_analysis,
+            rep_num=rep_num,
+            rep_duration=0.0  # Duration will be passed separately if available
+        )
     
     # Use smart feedback system (includes ML, IMU, and landmark data)
     return get_smart_feedback(

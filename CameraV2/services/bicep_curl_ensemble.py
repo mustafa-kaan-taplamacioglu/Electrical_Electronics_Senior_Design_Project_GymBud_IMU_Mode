@@ -485,6 +485,12 @@ class BicepCurlEnsembleModel:
             'regional_scores': regional_scores
         }
         
+        # Add LW/RW pitch ranges to result (important for ROM feedback)
+        if lw_pitch_range is not None:
+            result['lw_pitch_range'] = round(lw_pitch_range, 1)
+        if rw_pitch_range is not None:
+            result['rw_pitch_range'] = round(rw_pitch_range, 1)
+        
         if wrist_analysis:
             result['left_wrist'] = wrist_analysis['left_wrist']
             result['right_wrist'] = wrist_analysis['right_wrist']

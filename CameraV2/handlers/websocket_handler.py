@@ -532,7 +532,8 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 'speed_label': rep_result.get('speed_label', ''),
                                                                 'duration': rep_result.get('duration', 0),
                                                                 'lw_pitch_range': rep_result.get('lw_pitch_range', 0),
-                                                                'rw_pitch_range': rep_result.get('rw_pitch_range', 0)
+                                                                'rw_pitch_range': rep_result.get('rw_pitch_range', 0),
+                                                                'imu_analysis': rep_result.get('imu_analysis', None)  # Add IMU analysis for session feedback
                                                             }
                                                             if 'reps_data' not in active_session:
                                                                 active_session['reps_data'] = []
@@ -1210,22 +1211,57 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     session['current_rep_imu'].pop(0)
 
                     # Calculate angle
-                    config = EXERCISE_CONFIG.get(exercise, {})
-                    joints = config.get('joints', {}).get('left', (11, 13, 15))
+                    # Check fusion mode for IMU-only mode angle calculation
+                    fusion_mode = session.get('fusion_mode', 'camera_only')
                     
-                    try:
-                        # Use left arm joints (shoulder, elbow, wrist)
-                        a = [landmarks[joints[0]]['x'], landmarks[joints[0]]['y']]
-                        b = [landmarks[joints[1]]['x'], landmarks[joints[1]]['y']]
-                        c = [landmarks[joints[2]]['x'], landmarks[joints[2]]['y']]
-                        angle = calculate_angle(a, b, c)
-                        
-                        # Validate angle is reasonable (0-180°)
-                        if angle < 0 or angle > 180 or np.isnan(angle):
+                    if fusion_mode == 'imu_only':
+                        # IMU-only mode: Use IMU pitch values to calculate angle
+                        rep_imu_samples = session.get('current_rep_imu', [])
+                        if rep_imu_samples:
+                            last_imu = rep_imu_samples[-1]
+                            lw_pitch = last_imu.get('left_wrist', {}).get('euler', {}).get('pitch', 0)
+                            rw_pitch = last_imu.get('right_wrist', {}).get('euler', {}).get('pitch', 0)
+                            
+                            # Calculate average pitch (or use max if one is missing)
+                            if lw_pitch != 0 and rw_pitch != 0:
+                                avg_pitch = (lw_pitch + rw_pitch) / 2
+                            elif lw_pitch != 0:
+                                avg_pitch = lw_pitch
+                            elif rw_pitch != 0:
+                                avg_pitch = rw_pitch
+                            else:
+                                avg_pitch = 0
+                            
+                            # Convert pitch to elbow angle for biceps curl
+                            # Pitch range: -90° (arm down/extended) to +90° (arm up/contracted)
+                            # Elbow angle: 180° (extended) to 30° (contracted)
+                            # Mapping: pitch -90° → elbow 180°, pitch 0° → elbow 90°, pitch +90° → elbow 30°
+                            if avg_pitch != 0:
+                                # Linear mapping: pitch -90 to +90 → elbow 180 to 30
+                                elbow_angle = 105 - (avg_pitch * 0.833)  # 150° range / 180° pitch range = 0.833
+                                angle = max(30, min(180, elbow_angle))  # Clamp to reasonable range
+                            else:
+                                angle = 0
+                        else:
                             angle = 0
-                    except (IndexError, KeyError, TypeError) as e:
-                        print(f"⚠️ Angle calculation error: {e}")
-                        angle = 0
+                    else:
+                        # Camera mode: Use landmark-based angle calculation
+                        config = EXERCISE_CONFIG.get(exercise, {})
+                        joints = config.get('joints', {}).get('left', (11, 13, 15))
+                        
+                        try:
+                            # Use left arm joints (shoulder, elbow, wrist)
+                            a = [landmarks[joints[0]]['x'], landmarks[joints[0]]['y']]
+                            b = [landmarks[joints[1]]['x'], landmarks[joints[1]]['y']]
+                            c = [landmarks[joints[2]]['x'], landmarks[joints[2]]['y']]
+                            angle = calculate_angle(a, b, c)
+                            
+                            # Validate angle is reasonable (0-180°)
+                            if angle < 0 or angle > 180 or np.isnan(angle):
+                                angle = 0
+                        except (IndexError, KeyError, TypeError) as e:
+                            print(f"⚠️ Angle calculation error: {e}")
+                            angle = 0
                     
                     # Check form
                     form_result = form_analyzer.check_form(landmarks)
@@ -1502,6 +1538,26 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         
                         print(f"🔢 Rep #{rep_result.get('rep', 0)} completed: Set {current_set}, Rep {current_rep_in_set}/{reps_per_set}, Valid: {rep_result.get('is_valid', False)}")
                         
+                        # Store rep data for session summary (camera mode)
+                        if 'reps_data' not in session:
+                            session['reps_data'] = []
+                        
+                        # Create rep_data from rep_result
+                        rep_data = {
+                            'rep': rep_result.get('rep', session['total_reps_in_session']),
+                            'form_score': rep_result.get('form_score', form_result['score']),
+                            'timestamp': time.time(),
+                            'regional_scores': rep_result.get('regional_scores', form_result.get('regional_scores', {})),
+                            'regional_issues': rep_result.get('regional_issues', form_result.get('regional_issues', {})),
+                            'is_valid': rep_result.get('is_valid', True),
+                            'min_angle': rep_result.get('min_angle'),
+                            'max_angle': rep_result.get('max_angle'),
+                            'lw_pitch_range': rep_result.get('lw_pitch_range', 0),
+                            'rw_pitch_range': rep_result.get('rw_pitch_range', 0),
+                            'imu_analysis': rep_result.get('imu_analysis', None)  # Add IMU analysis if available
+                        }
+                        session['reps_data'].append(rep_data)
+                        
                         # Update set/rep info in response
                         response['current_set'] = current_set
                         response['current_rep_in_set'] = current_rep_in_set
@@ -1578,6 +1634,22 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                 # Send session summary
                                 # Use total_reps_in_session for IMU-only mode (reps_data may be empty)
                                 total_reps = session.get('total_reps_in_session', len(session.get('reps_data', [])))
+                                
+                                # Prepare rep list with scores and speeds
+                                rep_list = []
+                                for rep_data in session.get('reps_data', []):
+                                    rep_list.append({
+                                        'rep_number': rep_data.get('rep', 0),
+                                        'form_score': round(rep_data.get('form_score', 0), 1),
+                                        'duration': round(rep_data.get('duration', 0), 2),
+                                        'speed_class': rep_data.get('speed_class', 'medium'),
+                                        'speed_label': rep_data.get('speed_label', 'Orta Hız'),
+                                        'speed_emoji': rep_data.get('speed_emoji', '✅'),
+                                        'is_valid': rep_data.get('is_valid', True),
+                                        'regional_scores': rep_data.get('regional_scores', {}),
+                                        'issues': rep_data.get('issues', [])
+                                    })
+                                
                                 summary_data = {
                                     'type': 'session_summary',
                                     'total_reps': total_reps,
@@ -1588,6 +1660,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     'regional_scores': avg_regional_scores,
                                     'regional_feedback': regional_feedbacks,  # Add regional feedback
                                     'feedback': session_feedback,
+                                    'rep_list': rep_list,  # Add rep list with scores and speeds
                                     'workout_complete': True,
                                     'message': 'Workout completed automatically! All sets and reps finished.'
                                 }

@@ -75,6 +75,14 @@ except ImportError:
     MULTI_EXERCISE_ENSEMBLE_AVAILABLE = False
     print("⚠️  Multi-exercise ensemble model not available")
 
+# Import IMU-only form analyzer
+try:
+    from services.imu_form_analyzer import IMUFormAnalyzer
+    IMU_FORM_ANALYZER_AVAILABLE = True
+except ImportError:
+    IMU_FORM_ANALYZER_AVAILABLE = False
+    print("⚠️  IMU form analyzer not available")
+
 ENSEMBLE_MODEL_AVAILABLE = BICEP_ENSEMBLE_AVAILABLE or MULTI_EXERCISE_ENSEMBLE_AVAILABLE
 
 # Fallback function if ensemble not available
@@ -169,6 +177,12 @@ class HybridIMURepDetector:
         
         # ONE-CLASS CLASSIFIER: DISABLED (too strict, rejects valid bicep curls)
         # Using wrist synchronization + pitch range validation instead
+        
+        # IMU-ONLY FORM ANALYZER: For enhanced IMU-only mode analysis
+        if IMU_FORM_ANALYZER_AVAILABLE and exercise == 'bicep_curls':
+            self.imu_form_analyzer = IMUFormAnalyzer(exercise=exercise)
+        else:
+            self.imu_form_analyzer = None
         self.use_one_class_validation = False
         self.one_class_model = None
         self.one_class_scaler = None
@@ -576,6 +590,60 @@ class HybridIMURepDetector:
         analysis['regional_issues'] = wrist_scores.get('regional_issues', {})
         analysis['regional_feedback'] = wrist_scores.get('regional_feedback', {})
         analysis['wrist_comparison'] = wrist_scores.get('comparison_feedback', '')
+        
+        # === IMU-ONLY MODE: Enhanced analysis using IMU form analyzer ===
+        if self.imu_form_analyzer and self.exercise == 'bicep_curls':
+            try:
+                # Get IMU sequence from buffer (last rep's samples)
+                # Use recent IMU buffer samples that correspond to this rep
+                imu_sequence = []
+                if hasattr(self, 'imu_buffer') and len(self.imu_buffer) > 0:
+                    # Get samples from current rep (approximate - use recent samples)
+                    # For more accuracy, we could track rep start/end in buffer
+                    recent_samples = self.imu_buffer[-self.current_rep_samples:] if self.current_rep_samples > 0 else self.imu_buffer[-50:]
+                    imu_sequence = recent_samples
+                
+                # If we have enough samples, use IMU form analyzer
+                if len(imu_sequence) >= 5:
+                    imu_analysis_result = self.imu_form_analyzer.analyze_bicep_curl_imu_only(
+                        imu_sequence=imu_sequence,
+                        rep_duration=rep_duration
+                    )
+                    
+                    # Merge IMU-only analysis results
+                    if imu_analysis_result.get('imu_analysis'):
+                        analysis['imu_analysis'] = imu_analysis_result['imu_analysis']
+                    
+                    # Override form score with IMU-only analysis if it's more detailed
+                    if imu_analysis_result.get('score') and len(imu_sequence) >= 10:
+                        # Use IMU-only score if we have enough data
+                        analysis['form_score'] = imu_analysis_result['score']
+                        analysis['imu_only_score'] = True  # Flag to indicate IMU-only scoring
+                    
+                    # Merge regional scores (IMU-only gives more detailed arms analysis)
+                    if imu_analysis_result.get('regional_scores'):
+                        # Keep existing scores but enhance arms score
+                        existing_arms = analysis.get('regional_scores', {}).get('arms', 0)
+                        imu_arms = imu_analysis_result['regional_scores'].get('arms', 0)
+                        # Use IMU score if it's more detailed (has imu_analysis)
+                        if imu_analysis_result.get('imu_analysis'):
+                            analysis['regional_scores']['arms'] = imu_arms
+                    
+                    # Merge issues
+                    if imu_analysis_result.get('issues'):
+                        existing_issues = analysis.get('issues', [])
+                        analysis['issues'] = list(set(existing_issues + imu_analysis_result['issues']))
+                    
+                    # Merge regional issues
+                    if imu_analysis_result.get('regional_issues'):
+                        for region, region_issues in imu_analysis_result['regional_issues'].items():
+                            if region_issues:
+                                existing_region_issues = analysis.get('regional_issues', {}).get(region, [])
+                                analysis.setdefault('regional_issues', {})[region] = list(set(existing_region_issues + region_issues))
+            except Exception as e:
+                if self.debug_enabled:
+                    print(f"⚠️  IMU form analyzer error: {e}")
+                # Continue with existing analysis if IMU analyzer fails
         
         # Store analysis
         self.last_rep_analysis = analysis
@@ -1615,7 +1683,12 @@ class HybridIMURepDetector:
                 'form_feedback': rep_analysis.get('form_feedback'),
                 'issues': rep_analysis.get('issues', []),
                 'pitch_range': rep_analysis.get('pitch_range'),
-                'gyro_magnitude': rep_analysis.get('gyro_magnitude')
+                'gyro_magnitude': rep_analysis.get('gyro_magnitude'),
+                # LW/RW pitch ranges for ROM feedback
+                'lw_pitch_range': rep_analysis.get('lw_pitch_range', 0),
+                'rw_pitch_range': rep_analysis.get('rw_pitch_range', 0),
+                # IMU analysis for detailed feedback
+                'imu_analysis': rep_analysis.get('imu_analysis', None)
             }
             
             if self.debug_enabled:

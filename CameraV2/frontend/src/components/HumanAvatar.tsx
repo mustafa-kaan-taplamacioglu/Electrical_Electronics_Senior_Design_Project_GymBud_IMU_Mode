@@ -350,6 +350,134 @@ function IMUSensorMarker({
 }
 
 // Helper to convert IMU unit_vectors format {x,y,z} to [x,y,z] tuple
+// Arm Animation Component for IMU-only mode
+// Renders arm segments (shoulder → elbow → wrist) based on IMU data
+function ArmAnimation({
+  elbowPos,
+  wristPos,
+  isLeft,
+  imuData
+}: {
+  elbowPos: [number, number, number];
+  wristPos: [number, number, number];
+  isLeft: boolean;
+  imuData?: any;
+}) {
+  const forearmRef = useRef<THREE.Mesh>(null);
+  const upperArmRef = useRef<THREE.Mesh>(null);
+  const elbowRef = useRef<THREE.Mesh>(null);
+  const shoulderRef = useRef<THREE.Mesh>(null);
+  
+  // Smooth position interpolation using ref (for useFrame)
+  const smoothWristPos = useRef<THREE.Vector3>(new THREE.Vector3(...wristPos));
+  
+  // Elbow position (fixed origin)
+  const elbowVec = useMemo(() => new THREE.Vector3(...elbowPos), [elbowPos]);
+  
+  // Shoulder position (above elbow, slightly outward)
+  const shoulderOffset = isLeft ? -0.15 : 0.15;
+  const shoulderVec = useMemo(
+    () => new THREE.Vector3(elbowPos[0] + shoulderOffset, elbowPos[1] + 0.3, elbowPos[2]),
+    [elbowPos, shoulderOffset]
+  );
+  
+  // Update smooth position when wristPos changes
+  useEffect(() => {
+    smoothWristPos.current.set(...wristPos);
+  }, [wristPos]);
+  
+  // Smooth wrist position update and forearm mesh animation
+  useFrame(() => {
+    // Smooth interpolation
+    const targetWrist = new THREE.Vector3(...wristPos);
+    smoothWristPos.current.lerp(targetWrist, 0.15);
+    
+    // Update forearm mesh position and rotation
+    if (forearmRef.current) {
+      const forearmDir = new THREE.Vector3().subVectors(smoothWristPos.current, elbowVec);
+      const forearmLen = elbowVec.distanceTo(smoothWristPos.current);
+      
+      if (forearmLen > 0.01) {
+        const forearmNorm = forearmDir.clone().normalize();
+        const forearmMidPoint = new THREE.Vector3().addVectors(elbowVec, smoothWristPos.current).multiplyScalar(0.5);
+        
+        // Update position
+        forearmRef.current.position.set(forearmMidPoint.x, forearmMidPoint.y, forearmMidPoint.z);
+        
+        // Update rotation
+        const up = new THREE.Vector3(0, 1, 0);
+        const quat = new THREE.Quaternion().setFromUnitVectors(up, forearmNorm);
+        forearmRef.current.quaternion.copy(quat);
+        
+        // Update scale (length) - base length is 0.3
+        forearmRef.current.scale.set(1, Math.max(0.1, forearmLen / 0.3), 1);
+      }
+    }
+  });
+  
+  // Upper arm (shoulder → elbow) segment
+  const upperArmDirection = useMemo(() => {
+    const dir = new THREE.Vector3().subVectors(elbowVec, shoulderVec);
+    return dir.normalize();
+  }, [shoulderVec, elbowVec]);
+  
+  const upperArmLength = useMemo(() => {
+    return shoulderVec.distanceTo(elbowVec);
+  }, [shoulderVec, elbowVec]);
+  
+  const upperArmMid = useMemo(() => {
+    return new THREE.Vector3().addVectors(shoulderVec, elbowVec).multiplyScalar(0.5);
+  }, [shoulderVec, elbowVec]);
+  
+  const upperArmQuaternion = useMemo(() => {
+    const up = new THREE.Vector3(0, 1, 0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(up, upperArmDirection);
+    return quat;
+  }, [upperArmDirection]);
+  
+  // Colors
+  const forearmColor = isLeft ? '#3b82f6' : '#a855f7';
+  const forearmEmissive = isLeft ? '#1e40af' : '#7c3aed';
+  
+  return (
+    <group>
+      {/* Shoulder joint (small sphere) */}
+      <mesh ref={shoulderRef} position={[shoulderVec.x, shoulderVec.y, shoulderVec.z]}>
+        <sphereGeometry args={[0.025, 16, 16]} />
+        <meshStandardMaterial color="#666666" />
+      </mesh>
+      
+      {/* Upper arm segment (shoulder → elbow) */}
+      <mesh
+        ref={upperArmRef}
+        position={[upperArmMid.x, upperArmMid.y, upperArmMid.z]}
+        quaternion={upperArmQuaternion}
+      >
+        <cylinderGeometry args={[0.025, 0.025, upperArmLength, 16]} />
+        <meshStandardMaterial color="#666666" metalness={0.3} roughness={0.7} />
+      </mesh>
+      
+      {/* Elbow joint (origin point) */}
+      <mesh ref={elbowRef} position={[elbowVec.x, elbowVec.y, elbowVec.z]}>
+        <sphereGeometry args={[0.03, 16, 16]} />
+        <meshStandardMaterial color="#888888" />
+      </mesh>
+      
+      {/* Forearm segment (elbow → wrist) - animated in useFrame */}
+      <mesh ref={forearmRef}>
+        <cylinderGeometry args={[0.02, 0.02, 0.3, 16]} />
+        <meshStandardMaterial
+          color={forearmColor}
+          emissive={forearmEmissive}
+          emissiveIntensity={0.3}
+          metalness={0.4}
+          roughness={0.6}
+        />
+      </mesh>
+    </group>
+  );
+}
+
 function convertUnitVectors(uv: any): { normal: [number, number, number]; tangent: [number, number, number]; binormal: [number, number, number] } | undefined {
   if (!uv) return undefined;
   return {
@@ -379,6 +507,14 @@ function IMUSensorMarkers({
   const [rwPos, setRwPos] = useState<[number, number, number]>([0.55, 0.95, 0.1]);
   const [chPos, setChPos] = useState<[number, number, number]>([0, 1.25, 0.15]);
   
+  // Update positions for IMU-only mode (centered)
+  useEffect(() => {
+    if (fusionMode === 'imu_only') {
+      setLwPos([-0.4, 1.0, 0.0]);
+      setRwPos([0.4, 1.0, 0.0]);
+    }
+  }, [fusionMode]);
+  
   // Trajectory tracking with state (for re-renders)
   const [lwTrajectory, setLwTrajectory] = useState<THREE.Vector3[]>([]);
   const [rwTrajectory, setRwTrajectory] = useState<THREE.Vector3[]>([]);
@@ -386,8 +522,9 @@ function IMUSensorMarkers({
   const MAX_TRAJECTORY_POINTS = 50;
   
   // For IMU-only mode: track position based on acceleration/orientation
-  const lwBasePos = useRef(new THREE.Vector3(-0.35, 1.0, 0.3));
-  const rwBasePos = useRef(new THREE.Vector3(0.35, 1.0, 0.3));
+  // Center LW and RW nodes horizontally, keep them at same height
+  const lwBasePos = useRef(new THREE.Vector3(-0.4, 1.0, 0.0));
+  const rwBasePos = useRef(new THREE.Vector3(0.4, 1.0, 0.0));
   const chBasePos = useRef(new THREE.Vector3(0, 1.25, 0.15));
   
   useFrame(() => {
@@ -538,8 +675,37 @@ function IMUSensorMarkers({
   const rwUnitVectors = convertUnitVectors(imuData?.rightWrist?.unit_vectors);
   const chUnitVectors = convertUnitVectors(imuData?.chest?.unit_vectors);
   
+  // Elbow positions (fixed origins for IMU-only mode)
+  const leftElbowPos: [number, number, number] = [-0.4, 1.0, 0.0];
+  const rightElbowPos: [number, number, number] = [0.4, 1.0, 0.0];
+  
   return (
     <group ref={groupRef}>
+      {/* IMU-only mode: Arm animations */}
+      {fusionMode === 'imu_only' && (
+        <>
+          {/* Left Arm Animation */}
+          {imuData?.leftWrist && (
+            <ArmAnimation
+              elbowPos={leftElbowPos}
+              wristPos={lwPos}
+              isLeft={true}
+              imuData={imuData.leftWrist}
+            />
+          )}
+          
+          {/* Right Arm Animation */}
+          {imuData?.rightWrist && (
+            <ArmAnimation
+              elbowPos={rightElbowPos}
+              wristPos={rwPos}
+              isLeft={false}
+              imuData={imuData.rightWrist}
+            />
+          )}
+        </>
+      )}
+      
       {/* Left Wrist Marker */}
       <group position={lwPos}>
         <IMUSensorMarker 
@@ -562,17 +728,19 @@ function IMUSensorMarkers({
           trajectory={rwTrajectory}
         />
       </group>
-      {/* Chest Marker */}
-      <group position={chPos}>
-        <IMUSensorMarker 
-          position={[0, 0, 0]} 
-          label="CH" 
-          color="#f59e0b"
-          isActive={!!imuData?.chest}
-          unitVectors={chUnitVectors}
-          trajectory={chTrajectory}
-        />
-      </group>
+      {/* Chest Marker - Hide in IMU-only mode */}
+      {fusionMode !== 'imu_only' && (
+        <group position={chPos}>
+          <IMUSensorMarker 
+            position={[0, 0, 0]} 
+            label="CH" 
+            color="#f59e0b"
+            isActive={!!imuData?.chest}
+            unitVectors={chUnitVectors}
+            trajectory={chTrajectory}
+          />
+        </group>
+      )}
     </group>
   );
 }
@@ -1107,8 +1275,11 @@ function RPMAvatar({
           <gridHelper args={[3, 30, '#4a4a5a', '#3a3a4a']} rotation={[0, 0, Math.PI / 2]} position={[0, 0, 0]} />
         </group>
       )}
-      <primitive object={clonedModel} />
-      {/* IMU Sensor Markers with Unit Vectors and Trajectories */}
+      {/* Hide avatar model in IMU-only mode, show only IMU nodes */}
+      {fusionMode !== 'imu_only' && (
+        <primitive object={clonedModel} />
+      )}
+      {/* IMU Sensor Markers with Unit Vectors and Trajectories - Always show LW and RW in IMU-only mode */}
       <IMUSensorMarkers 
         bonesRef={bonesRef} 
         imuData={imuData}
@@ -1202,8 +1373,8 @@ function Scene({
 
       <GymBackground url={backgroundUrl} />
 
-      {/* Only show avatar after calibration */}
-      {modelUrl && isCalibrated ? (
+      {/* Only show avatar after calibration - Hide in IMU-only mode */}
+      {fusionMode !== 'imu_only' && modelUrl && isCalibrated ? (
         <Suspense fallback={null}>
           <RPMAvatar 
             landmarks={landmarks} 
@@ -1213,10 +1384,21 @@ function Scene({
             fusionMode={fusionMode}
           />
         </Suspense>
-      ) : modelUrl ? (
+      ) : fusionMode !== 'imu_only' && modelUrl ? (
         // Before calibration: show static avatar in T-pose
         <Suspense fallback={null}>
           <StaticAvatar modelUrl={modelUrl} />
+        </Suspense>
+      ) : fusionMode === 'imu_only' ? (
+        // IMU-only mode: Show only IMU nodes, no avatar
+        <Suspense fallback={null}>
+          <RPMAvatar 
+            landmarks={null} 
+            modelUrl={modelUrl || ''} 
+            isCalibrated={true}
+            imuData={imuData}
+            fusionMode={fusionMode}
+          />
         </Suspense>
       ) : null}
       

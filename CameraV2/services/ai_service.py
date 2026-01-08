@@ -318,6 +318,111 @@ KISA, BİLİMSEL ve AKSİYON ALINACAK feedback ver (Türkçe):
 
 
 
+async def get_imu_only_llm_feedback(
+    exercise: str,
+    rep_data: dict,
+    imu_analysis: dict
+) -> dict:
+    """IMU-only mode için LLM feedback."""
+    from services.feedback_service import get_imu_only_bicep_curl_feedback
+    
+    if not openai_client:
+        return {
+            'overall': get_imu_only_bicep_curl_feedback(
+                exercise=exercise,
+                score=rep_data.get('form_score', 0),
+                imu_analysis=imu_analysis,
+                rep_num=rep_data.get('rep', 0),
+                rep_duration=rep_data.get('duration', 0)
+            )
+        }
+    
+    # IMU analiz detaylarını formatla
+    lw = imu_analysis.get('left_wrist', {})
+    rw = imu_analysis.get('right_wrist', {})
+    symmetry = imu_analysis.get('bilateral_symmetry', {})
+    tempo = imu_analysis.get('movement_quality', {}).get('tempo', {})
+    
+    imu_context = f"""
+📊 IMU SENSOR ANALİZİ (Biceps Curl - IMU-Only Mode):
+
+SOL BİLEK (LW):
+- Pitch ROM: {lw.get('pitch_range', 'N/A')}° ({lw.get('pitch_feedback', 'N/A')})
+- Roll: {lw.get('roll_range', 'N/A')}° ({lw.get('roll_feedback', 'N/A')})
+- Yaw: {lw.get('yaw_range', 'N/A')}° ({lw.get('yaw_feedback', 'N/A')})
+- Max İvme: {lw.get('accel_max', 'N/A')} m/s²
+- Max Açısal Hız: {lw.get('gyro_max', 'N/A')}°/s ({lw.get('gyro_feedback', 'N/A')})
+
+SAĞ BİLEK (RW):
+- Pitch ROM: {rw.get('pitch_range', 'N/A')}° ({rw.get('pitch_feedback', 'N/A')})
+- Roll: {rw.get('roll_range', 'N/A')}° ({rw.get('roll_feedback', 'N/A')})
+- Yaw: {rw.get('yaw_range', 'N/A')}° ({rw.get('yaw_feedback', 'N/A')})
+- Max İvme: {rw.get('accel_max', 'N/A')} m/s²
+- Max Açısal Hız: {rw.get('gyro_max', 'N/A')}°/s ({rw.get('gyro_feedback', 'N/A')})
+
+BİLATERAL SİMETRİ:
+- Durum: {symmetry.get('feedback', 'N/A')}
+- Pitch Fark: {symmetry.get('pitch_diff_pct', 'N/A')}%
+
+TEMPO:
+- {tempo.get('feedback', 'N/A')}
+
+🔬 BİLİMSEL BAĞLAM:
+- Optimal ROM: 120-150° (dirsek açısı)
+- Optimal Tempo: 2-3 saniye (TUT - Time Under Tension)
+- Dirsek sabitliği kritik (sadece ön kol hareket etmeli)
+- Bilateral simetri kas dengesizliğini önler
+"""
+    
+    prompt = f"""Sen uzman bir fitness koçusun. IMU-only mode'da biceps curl analizi yapıyorsun.
+
+Rep #{rep_data.get('rep', 0)} Analizi:
+- Form Skoru: {rep_data.get('form_score', 0):.1f}%
+- Rep Süresi: {rep_data.get('duration', 0):.1f} saniye
+{imu_context}
+
+KISA, BİLİMSEL ve AKSİYON ALINACAK feedback ver (Türkçe, 2-3 cümle):
+1. Pozitif başla
+2. IMU verilerini yorumla (sol/sağ bilek, simetri, tempo)
+3. Bilimsel gerçekleri kullan
+4. Kritik sorun varsa belirt
+5. Teşvik edici bitir"""
+
+    system_prompt = """Sen bir fitness koçusun. IMU-only mode'da sadece sensör verilerini kullanarak analiz yapıyorsun.
+Biceps curl bilimsel gerçekleri:
+- Optimal ROM: 120-150°
+- Optimal tempo: 2-3 saniye
+- Bilateral simetri önemli
+- Bilek stabilitesi kritik"""
+
+    try:
+        response = openai_client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': prompt}
+            ],
+            max_tokens=200,
+            temperature=0.7,
+        )
+        
+        return {
+            'overall': response.choices[0].message.content.strip(),
+            'imu_analysis_summary': imu_analysis
+        }
+    except Exception as e:
+        print(f"⚠️  OpenAI IMU-only feedback error: {e}")
+        return {
+            'overall': get_imu_only_bicep_curl_feedback(
+                exercise=exercise,
+                score=rep_data.get('form_score', 0),
+                imu_analysis=imu_analysis,
+                rep_num=rep_data.get('rep', 0),
+                rep_duration=rep_data.get('duration', 0)
+            )
+        }
+
+
 async def send_ai_feedback_async(
     websocket: WebSocket,
     exercise: str,
@@ -329,7 +434,8 @@ async def send_ai_feedback_async(
     imu_data: dict = None,
     landmarks: list = None,
     initial_positions: dict = None,
-    fusion_mode: str = 'camera_primary'
+    fusion_mode: str = 'camera_primary',
+    imu_analysis: dict = None
 ):
     """Send AI feedback asynchronously without blocking rep detection.
     Supports Camera-only, IMU-only, and Sensor Fusion modes.
@@ -402,12 +508,77 @@ async def get_session_feedback(exercise: str, reps_data: list, all_issues: list)
     
     # Try OpenAI first (if available)
     if openai_client:
+        print(f"🤖 Using OpenAI API for session feedback (exercise: {exercise}, reps: {total_reps})")
         try:
             top_issues_text = ', '.join([f"{issue} ({count}x)" for issue, count in top_issues]) if top_issues else 'None'
             
-            # Extract IMU data for tricep extensions
+            # Extract IMU data for bicep curls and tricep extensions
             imu_context = ""
-            if exercise == 'tricep_extensions':
+            if exercise == 'bicep_curls':
+                # Analyze LW/RW pitch ranges from reps_data
+                # Try multiple sources: lw_pitch_range/rw_pitch_range, imu_analysis, or pitch_range
+                lw_ranges = []
+                rw_ranges = []
+                durations = []
+                
+                for r in reps_data:
+                    # First try direct pitch_range values
+                    lw_pitch = r.get('lw_pitch_range', 0)
+                    rw_pitch = r.get('rw_pitch_range', 0)
+                    
+                    # If not available, try to extract from imu_analysis
+                    if (lw_pitch <= 0 or rw_pitch <= 0) and r.get('imu_analysis'):
+                        imu_analysis = r.get('imu_analysis', {})
+                        lw_data = imu_analysis.get('left_wrist', {})
+                        rw_data = imu_analysis.get('right_wrist', {})
+                        
+                        if lw_pitch <= 0 and lw_data.get('pitch_range'):
+                            lw_pitch = lw_data.get('pitch_range', 0)
+                        if rw_pitch <= 0 and rw_data.get('pitch_range'):
+                            rw_pitch = rw_data.get('pitch_range', 0)
+                    
+                    # If still not available, try pitch_range (averaged)
+                    if lw_pitch <= 0 and rw_pitch <= 0:
+                        pitch_range = r.get('pitch_range', 0)
+                        if pitch_range > 0:
+                            # Split evenly between LW and RW
+                            lw_pitch = pitch_range / 2
+                            rw_pitch = pitch_range / 2
+                    
+                    if lw_pitch > 0:
+                        lw_ranges.append(lw_pitch)
+                    if rw_pitch > 0:
+                        rw_ranges.append(rw_pitch)
+                    
+                    duration = r.get('duration', 0)
+                    if duration > 0:
+                        durations.append(duration)
+                
+                avg_lw = sum(lw_ranges) / len(lw_ranges) if lw_ranges else 0
+                avg_rw = sum(rw_ranges) / len(rw_ranges) if rw_ranges else 0
+                avg_duration = sum(durations) / len(durations) if durations else 2.0
+                avg_rom = (avg_lw + avg_rw) / 2 if avg_lw > 0 and avg_rw > 0 else max(avg_lw, avg_rw) if (avg_lw > 0 or avg_rw > 0) else 0
+                
+                symmetry_diff = abs(avg_lw - avg_rw) / max(avg_lw, avg_rw, 1) * 100 if avg_lw > 0 and avg_rw > 0 else 0
+                
+                imu_context = f"""
+📊 IMU SENSOR DATA ANALYSIS (Biceps Curl):
+- Left Wrist ROM: {avg_lw:.1f}° (average pitch range)
+- Right Wrist ROM: {avg_rw:.1f}° (average pitch range)
+- Combined ROM: {avg_rom:.1f}° (ideal: 120-150° for full biceps activation)
+- Bilateral Symmetry: {symmetry_diff:.1f}% difference (ideal: <10%)
+- Average Rep Duration: {avg_duration:.2f}s (ideal: 2-3s for optimal TUT)
+- Speed Classification: {'Too fast' if avg_duration < 1.2 else 'Fast' if avg_duration < 1.8 else 'Ideal' if avg_duration <= 2.5 else 'Slow' if avg_duration <= 3.5 else 'Too slow'}
+
+🔬 SCIENTIFIC CONTEXT:
+- Biceps brachii has 2 heads: short head and long head
+- Optimal ROM: 120-150° (dirsek açısı) for full biceps activation
+- Time Under Tension (TUT) of 2-3s optimizes muscle hypertrophy
+- Bilateral symmetry prevents muscle imbalances
+- Elbow stability is critical - only forearm should move, not upper arm
+- Full ROM = tam aşağı (180°) → tam yukarı (30-40°)
+"""
+            elif exercise == 'tricep_extensions':
                 lw_ranges = [r.get('lw_pitch_range', 0) for r in reps_data if r.get('lw_pitch_range', 0) > 0]
                 rw_ranges = [r.get('rw_pitch_range', 0) for r in reps_data if r.get('rw_pitch_range', 0) > 0]
                 durations = [r.get('duration', 0) for r in reps_data if r.get('duration', 0) > 0]
@@ -460,7 +631,20 @@ Provide comprehensive, scientifically-accurate feedback in Turkish:
 
 Keep it friendly, professional, scientifically accurate, and under 6-8 sentences. Focus on actionable, evidence-based advice."""
 
-            system_prompt = f"""You are a professional fitness coach and exercise physiologist specializing in triceps training. 
+            # Exercise-specific system prompt
+            if exercise == 'bicep_curls':
+                system_prompt = f"""You are a professional fitness coach and exercise physiologist specializing in biceps training. 
+You provide scientifically-accurate, evidence-based feedback in Turkish. 
+You understand:
+- Biceps brachii anatomy (short head and long head)
+- Optimal ROM for biceps activation (120-150°)
+- Time Under Tension (TUT) principles for muscle hypertrophy (2-3s ideal)
+- Bilateral symmetry importance for muscle balance
+- Biomechanics of biceps curl (elbow stability, forearm movement)
+
+Always provide specific, actionable advice based on IMU sensor data analysis."""
+            elif exercise == 'tricep_extensions':
+                system_prompt = f"""You are a professional fitness coach and exercise physiologist specializing in triceps training. 
 You provide scientifically-accurate, evidence-based feedback in Turkish. 
 You understand:
 - Triceps brachii anatomy (lateral, long, medial heads)
@@ -470,6 +654,8 @@ You understand:
 - Biomechanics of triceps extension (elbow stability, forearm movement)
 
 Always provide specific, actionable advice based on IMU sensor data analysis."""
+            else:
+                system_prompt = """You are a professional fitness coach. Provide scientifically-accurate, evidence-based feedback in Turkish."""
 
             response = openai_client.chat.completions.create(
                 model='gpt-4o-mini',
@@ -481,10 +667,14 @@ Always provide specific, actionable advice based on IMU sensor data analysis."""
                 temperature=0.7,
             )
             
-            return response.choices[0].message.content.strip()
+            feedback_text = response.choices[0].message.content.strip()
+            print(f"✅ OpenAI session feedback generated successfully ({len(feedback_text)} chars)")
+            return feedback_text
         except Exception as e:
             print(f"⚠️  OpenAI session feedback error: {e}, falling back to rule-based")
             # Fall through to rule-based feedback
+    else:
+        print(f"ℹ️  OpenAI API not available - using rule-based session feedback")
     
     # Fallback: Build feedback based on performance (rule-based)
     feedback_parts = []

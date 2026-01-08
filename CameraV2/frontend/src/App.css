@@ -317,6 +317,17 @@ body {
   flex-wrap: wrap;
 }
 
+/* IMU-only mode: Center the avatar/grid when camera is hidden */
+.video-avatar-container.imu-only-mode {
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.video-avatar-container.imu-only-mode .avatar-wrapper {
+  margin: 0 auto;
+}
+
 .avatar-wrapper {
   position: relative;
   border-radius: 20px;
@@ -797,6 +808,34 @@ body {
   font-size: 0.9375rem;
   line-height: 1.6;
   color: var(--text-secondary);
+}
+
+.arms-feedback {
+  margin-bottom: 24px;
+}
+
+.rep-list {
+  margin-bottom: 24px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.rep-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rep-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.rep-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.rep-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .finish-card .back-button {
