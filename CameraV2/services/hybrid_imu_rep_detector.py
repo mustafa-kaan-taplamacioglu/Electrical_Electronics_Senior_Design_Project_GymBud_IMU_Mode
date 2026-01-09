@@ -663,20 +663,20 @@ class HybridIMURepDetector:
     def _classify_speed_simple(self, rep_duration: float) -> Dict:
         """Simple speed classification without ensemble model."""
         if rep_duration < 1.2:
-            return {'class': 'very_fast', 'label': 'Çok Hızlı', 'emoji': '🚀', 
-                    'feedback': 'Çok hızlı - biraz yavaşla.'}
+            return {'class': 'very_fast', 'label': 'Very Fast', 'emoji': '🚀', 
+                    'feedback': 'Too fast - slow down a bit.'}
         elif rep_duration < 1.8:
-            return {'class': 'fast', 'label': 'Hızlı', 'emoji': '⚡', 
-                    'feedback': 'Hızlı tempo - formunu koru.'}
+            return {'class': 'fast', 'label': 'Fast', 'emoji': '⚡', 
+                    'feedback': 'Fast tempo - maintain form.'}
         elif rep_duration < 2.5:
-            return {'class': 'medium', 'label': 'Orta Hız', 'emoji': '✅', 
-                    'feedback': 'İdeal tempo!'}
+            return {'class': 'medium', 'label': 'Medium', 'emoji': '✅', 
+                    'feedback': 'Ideal tempo!'}
         elif rep_duration < 3.5:
-            return {'class': 'slow', 'label': 'Yavaş', 'emoji': '🐢', 
-                    'feedback': 'Yavaş ve kontrollü.'}
+            return {'class': 'slow', 'label': 'Slow', 'emoji': '🐢', 
+                    'feedback': 'Slow and controlled.'}
         else:
-            return {'class': 'very_slow', 'label': 'Çok Yavaş', 'emoji': '🦥', 
-                    'feedback': 'Biraz hızlandırabilirsin.'}
+            return {'class': 'very_slow', 'label': 'Very Slow', 'emoji': '🦥', 
+                    'feedback': 'Try to speed up a bit.'}
     
     def _calculate_simple_form_score(self, pitch_range: float, rep_duration: float) -> float:
         """Calculate form score without ensemble model."""

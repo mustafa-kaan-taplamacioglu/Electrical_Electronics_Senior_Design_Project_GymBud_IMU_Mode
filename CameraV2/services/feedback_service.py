@@ -324,30 +324,34 @@ def get_rule_based_regional_feedback(
     region_issues: list,
     rep_num: int,
     min_angle: float = None,
-    max_angle: float = None
+    max_angle: float = None,
+    fallback_score: float = None
 ) -> str:
     """Get rule-based feedback for a specific body region using MediaPipe data."""
     region_names = {
-        'arms': 'Kollar',
-        'legs': 'Bacaklar',
-        'core': 'Gövde',
-        'head': 'Kafa'
+        'arms': 'Arms',
+        'legs': 'Legs',
+        'core': 'Core',
+        'head': 'Head'
     }
     
-    region_name_tr = region_names.get(region, region)
+    region_name = region_names.get(region, region.capitalize())
+    
+    # Use fallback score if region_score is 0 or invalid
+    display_score = region_score if region_score > 0 else (fallback_score or 0)
     
     # If score is high, give positive feedback
-    if region_score >= 85:
+    if display_score >= 85:
         if region == 'arms':
-            return f"💪 Kollar mükemmel! Form çok iyi."
+            return f"Arms are excellent! Great form."
         elif region == 'legs':
-            return f"🦵 Bacaklar mükemmel! Form çok iyi."
+            return f"Legs are excellent! Great form."
         elif region == 'core':
-            return f"✅ Gövde mükemmel! Duruş çok iyi."
+            return f"Core is excellent! Great posture."
         elif region == 'head':
-            return f"👍 Kafa pozisyonu mükemmel!"
+            return f"Head position is excellent!"
         else:
-            return f"{region_name_tr} mükemmel! Skor: %{region_score:.0f}"
+            return f"{region_name} excellent! Score: {display_score:.0f}%"
     
     # If there are specific issues, provide targeted feedback
     if region_issues:
@@ -358,70 +362,70 @@ def get_rule_based_regional_feedback(
         if region == 'arms':
             if 'dirsek' in issue_lower or 'elbow' in issue_lower or 'oynuyor' in issue_lower:
                 if 'sol' in issue_lower or 'left' in issue_lower:
-                    return "Sol dirseğini gövdene sabitle, daha az oynatmalısın."
+                    return "Keep your left elbow fixed to your body, minimize movement."
                 elif 'sağ' in issue_lower or 'right' in issue_lower:
-                    return "Sağ dirseğini gövdene sabitle, daha az oynatmalısın."
+                    return "Keep your right elbow fixed to your body, minimize movement."
                 else:
-                    return "Dirseklerini sabit tutmalısın, gövdene yakın tut."
+                    return "Keep your elbows stable, close to your body."
             elif 'kol' in issue_lower and 'esit' in issue_lower:
-                return "Kollarını eşit yüksekliğe getirmelisin, simetrik hareket et."
+                return "Bring your arms to equal height, move symmetrically."
             elif 'uzat' in issue_lower or 'extend' in issue_lower:
-                return "Kollarını daha fazla uzatmalısın, tam hareket menzili kullan."
+                return "Extend your arms more, use full range of motion."
             elif 'bük' in issue_lower or 'curl' in issue_lower:
-                return "Kollarını daha fazla bük, hareket menzilini artır."
+                return "Curl your arms more, increase range of motion."
             else:
-                return f"Kollar: {region_issues[0]}"
+                return f"Arms: {region_issues[0]}"
         
         # Legs feedback
         elif region == 'legs':
             if 'diz' in issue_lower or 'knee' in issue_lower:
                 if 'içe' in issue_lower or 'valgus' in issue_lower:
-                    return "Dizlerini ayak parmaklarınla hizalı tut, içe düşmesin."
+                    return "Keep your knees aligned with your toes, don't let them cave in."
                 elif 'öne' in issue_lower or 'forward' in issue_lower:
-                    return "Dizlerini ayak bileklerinin üzerinde tut, çok öne çıkmasın."
+                    return "Keep your knees over your ankles, don't let them go too far forward."
                 else:
-                    return "Diz pozisyonuna dikkat et, doğru açıda tut."
+                    return "Watch your knee position, maintain proper angle."
             elif 'duruş' in issue_lower or 'genişlik' in issue_lower:
-                return "Bacaklarını omuz genişliğinde tut, daha dengeli dur."
+                return "Keep your legs shoulder-width apart for better balance."
             elif 'derinlik' in issue_lower or 'depth' in issue_lower:
-                return "Daha derin inmelisin, tam hareket menzili kullan."
+                return "Go deeper, use full range of motion."
             else:
-                return f"Bacaklar: {region_issues[0]}"
+                return f"Legs: {region_issues[0]}"
         
         # Core feedback
         elif region == 'core':
             if 'gövde' in issue_lower or 'sırt' in issue_lower or 'omurga' in issue_lower:
                 if 'düz' in issue_lower or 'straight' in issue_lower:
-                    return "Gövdeni düz tut, omurganı nötr pozisyonda tut."
+                    return "Keep your torso straight, maintain neutral spine."
                 elif 'kavis' in issue_lower or 'arch' in issue_lower:
-                    return "Sırtını düzleştir, fazla kavisli olmasın."
+                    return "Straighten your back, avoid excessive arching."
                 elif 'eğil' in issue_lower or 'lean' in issue_lower:
-                    return "Gövdeni dikey tut, öne veya arkaya eğilme."
+                    return "Keep your torso vertical, don't lean forward or backward."
                 else:
-                    return "Gövdeni stabilize et, düz ve dengeli tut."
+                    return "Stabilize your core, keep it straight and balanced."
             elif 'pelvis' in issue_lower or 'kalça' in issue_lower:
-                return "Kalça pozisyonunu kontrol et, pelvis nötr olsun."
+                return "Control your hip position, keep pelvis neutral."
             else:
-                return f"Gövde: {region_issues[0]}"
+                return f"Core: {region_issues[0]}"
         
         # Head feedback
         elif region == 'head':
             if 'öne' in issue_lower or 'forward' in issue_lower:
-                return "Başını öne eğme, ileri bak."
+                return "Don't tilt your head forward, look ahead."
             elif 'yukarı' in issue_lower or 'up' in issue_lower:
-                return "Başını çok yukarı kaldırma, nötr pozisyonda tut."
+                return "Don't lift your head too high, keep it neutral."
             elif 'aşağı' in issue_lower or 'down' in issue_lower:
-                return "Başını aşağı bakma, öne doğru bak."
+                return "Don't look down, look straight ahead."
             else:
-                return f"Kafa: {region_issues[0]}"
+                return f"Head: {region_issues[0]}"
     
     # Default feedback based on score range
-    if region_score >= 70:
-        return f"{region_name_tr} iyi (Skor: %{region_score:.0f}), küçük iyileştirmeler yapabilirsin."
-    elif region_score >= 50:
-        return f"{region_name_tr} orta (Skor: %{region_score:.0f}), formunu iyileştirmeye odaklan."
+    if display_score >= 70:
+        return f"{region_name} good (Score: {display_score:.0f}%), small improvements possible."
+    elif display_score >= 50:
+        return f"{region_name} moderate (Score: {display_score:.0f}%), focus on improving form."
     else:
-        return f"{region_name_tr} düşük (Skor: %{region_score:.0f}), formunu düzeltmeye öncelik ver."
+        return f"{region_name} needs work (Score: {display_score:.0f}%), prioritize form correction."
 
 
 async def get_regional_ai_feedback(

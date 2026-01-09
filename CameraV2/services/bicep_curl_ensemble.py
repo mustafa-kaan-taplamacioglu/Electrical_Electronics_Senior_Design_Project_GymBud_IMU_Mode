@@ -35,32 +35,32 @@ SPEED_THRESHOLDS = {
     'very_slow': (3.5, float('inf'))  # > 3.5s
 }
 
-# Speed feedback in Turkish
+# Speed feedback
 SPEED_FEEDBACK_TR = {
     'very_fast': {
-        'label': 'Çok Hızlı',
+        'label': 'Very Fast',
         'emoji': '🚀',
-        'feedback': 'Çok hızlı yapıyorsun! Biraz yavaşlatarak kasları daha iyi hissedebilirsin.'
+        'feedback': 'Too fast! Slow down to feel the muscles better.'
     },
     'fast': {
-        'label': 'Hızlı',
+        'label': 'Fast',
         'emoji': '⚡',
-        'feedback': 'Hızlı tempo, ama dikkat et - formu koruyarak devam et.'
+        'feedback': 'Fast tempo - maintain proper form.'
     },
     'medium': {
-        'label': 'Orta Hız',
+        'label': 'Medium',
         'emoji': '✅',
-        'feedback': 'İdeal tempo! Bu hızda devam et.'
+        'feedback': 'Ideal tempo! Keep this pace.'
     },
     'slow': {
-        'label': 'Yavaş',
+        'label': 'Slow',
         'emoji': '🐢',
-        'feedback': 'Yavaş ve kontrollü - kasları iyi hissediyorsun.'
+        'feedback': 'Slow and controlled - good muscle engagement.'
     },
     'very_slow': {
-        'label': 'Çok Yavaş',
+        'label': 'Very Slow',
         'emoji': '🦥',
-        'feedback': 'Çok yavaş yapıyorsun. Biraz hızlandırabilirsin.'
+        'feedback': 'Too slow. Try to speed up a bit.'
     }
 }
 
@@ -602,15 +602,15 @@ def calculate_wrist_scores(
         lw_pitch_score = 60 + 40 * (lw_pitch_range - min_acceptable_range) / (ideal_pitch_range - min_acceptable_range)
     elif lw_pitch_range >= 50:
         lw_pitch_score = 30 + 30 * (lw_pitch_range - 50) / 30
-        lw_issues.append("Sol kol hareket açısı dar")
+        lw_issues.append("Left arm range of motion is limited")
     else:
         lw_pitch_score = max(10, lw_pitch_range / 50 * 30)
-        lw_issues.append("Sol kol hareketi çok kısıtlı")
+        lw_issues.append("Left arm movement is very restricted")
     
     # Roll range penalty (should be minimal for proper bicep curl)
     if lw_roll_range > 45:
         lw_pitch_score -= 10
-        lw_issues.append("Sol bilek fazla döndü")
+        lw_issues.append("Left wrist rotated too much")
     
     # Calculate RW score
     rw_issues = []
@@ -620,25 +620,25 @@ def calculate_wrist_scores(
         rw_pitch_score = 60 + 40 * (rw_pitch_range - min_acceptable_range) / (ideal_pitch_range - min_acceptable_range)
     elif rw_pitch_range >= 50:
         rw_pitch_score = 30 + 30 * (rw_pitch_range - 50) / 30
-        rw_issues.append("Sağ kol hareket açısı dar")
+        rw_issues.append("Right arm range of motion is limited")
     else:
         rw_pitch_score = max(10, rw_pitch_range / 50 * 30)
-        rw_issues.append("Sağ kol hareketi çok kısıtlı")
+        rw_issues.append("Right arm movement is very restricted")
     
     # Roll range penalty
     if rw_roll_range > 45:
         rw_pitch_score -= 10
-        rw_issues.append("Sağ bilek fazla döndü")
+        rw_issues.append("Right wrist rotated too much")
     
     # Synchronization score
     sync_score = 100.0
     sync_issues = []
     if sync_diff > 50:
         sync_score = max(30, 100 - (sync_diff - 50) * 1.5)
-        sync_issues.append("Kollar senkronize değil")
+        sync_issues.append("Arms are not synchronized")
     elif sync_diff > 30:
         sync_score = 80 - (sync_diff - 30) * 0.5
-        sync_issues.append("Kollar arası hafif fark var")
+        sync_issues.append("Slight difference between arms")
     
     # Final scores
     lw_final = max(0, min(100, lw_pitch_score))
@@ -651,26 +651,26 @@ def calculate_wrist_scores(
     # Generate arms feedback with left vs right comparison
     if abs(lw_pitch_range - rw_pitch_range) > 30:
         if lw_pitch_range > rw_pitch_range:
-            arms_feedback = f"Sol kol daha geniş hareket ediyor ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
+            arms_feedback = f"Left arm has wider range of motion ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
         else:
-            arms_feedback = f"Sağ kol daha geniş hareket ediyor ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)"
+            arms_feedback = f"Right arm has wider range of motion ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)"
     elif abs(lw_pitch_range - rw_pitch_range) > 15:
         if lw_pitch_range > rw_pitch_range:
-            arms_feedback = f"Sol kol biraz daha geniş ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
+            arms_feedback = f"Left arm slightly wider ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
         else:
-            arms_feedback = f"Sağ kol biraz daha geniş ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)"
+            arms_feedback = f"Right arm slightly wider ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)"
     else:
-        arms_feedback = f"Her iki kol dengeli ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
+        arms_feedback = f"Both arms balanced ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)"
     
     if abs(lw_pitch_range - rw_pitch_range) > 30:
         if lw_pitch_range > rw_pitch_range:
-            comparison_feedback = "Sağ kolun hareket açısı sol koldan daha az, dengelemeye çalış."
+            comparison_feedback = "Right arm has less range than left, try to balance."
         else:
-            comparison_feedback = "Sol kolun hareket açısı sağ koldan daha az, dengelemeye çalış."
+            comparison_feedback = "Left arm has less range than right, try to balance."
     elif lw_final >= 80 and rw_final >= 80:
-        comparison_feedback = "Her iki kol da iyi çalışıyor! 💪"
+        comparison_feedback = "Both arms working well! 💪"
     elif lw_final < 60 and rw_final < 60:
-        comparison_feedback = "Her iki kolun hareket açısını artırmaya çalış."
+        comparison_feedback = "Try to increase range of motion in both arms."
     
     return {
         'regional_scores': {
@@ -693,13 +693,13 @@ def calculate_wrist_scores(
             'head': []
         },
         'regional_feedback': {
-            'left_wrist': f"Sol Bilek: %{lw_final:.0f} (açı: {lw_pitch_range:.0f}°)",
-            'right_wrist': f"Sağ Bilek: %{rw_final:.0f} (açı: {rw_pitch_range:.0f}°)",
-            'sync': f"Senkronizasyon: %{sync_score:.0f}",
-            'arms': arms_feedback if arms_feedback else f"Kollar: %{(lw_final + rw_final) / 2:.0f}",
-            'legs': "Bacaklar: N/A",
-            'core': f"Denge: %{sync_score:.0f}",
-            'head': "Kafa: N/A"
+            'left_wrist': f"Left Wrist: {lw_final:.0f}% (angle: {lw_pitch_range:.0f}°)",
+            'right_wrist': f"Right Wrist: {rw_final:.0f}% (angle: {rw_pitch_range:.0f}°)",
+            'sync': f"Synchronization: {sync_score:.0f}%",
+            'arms': arms_feedback if arms_feedback else f"Arms: {(lw_final + rw_final) / 2:.0f}%",
+            'legs': "Legs: N/A",
+            'core': f"Balance: {sync_score:.0f}%",
+            'head': "Head: N/A"
         },
         'comparison_feedback': comparison_feedback,
         'lw_pitch_range': lw_pitch_range,

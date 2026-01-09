@@ -410,6 +410,12 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             formScore: repInfo.form_score || data.form_score || 0,
             issues: data.issues || [],
             timestamp: new Date(),
+            duration: repInfo.duration || 0,
+            speedClass: repInfo.speed_class || 'medium',
+            speedLabel: repInfo.speed_label || '',
+            speedEmoji: repInfo.speed_emoji || '',
+            isValid: repInfo.is_valid !== false,
+            regionalScores: repInfo.regional_scores || {},
           }]);
           
           // Update collected reps count if data recording is active (both usage and train modes)
@@ -480,7 +486,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
             formScore: rep.form_score || 0,
             duration: rep.duration || 0,
             speedClass: rep.speed_class || 'medium',
-            speedLabel: rep.speed_label || 'Orta Hız',
+            speedLabel: rep.speed_label || 'Medium',
             speedEmoji: rep.speed_emoji || '✅',
             isValid: rep.is_valid !== false,
             issues: rep.issues || [],
@@ -1223,7 +1229,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text'
               }}>
-                📊 Eğitim Seti Seçenekleri
+                📊 Training Set Options
               </h2>
               <p style={{ 
                 color: '#9ca3af', 
@@ -1231,7 +1237,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                 fontSize: 'clamp(14px, 2vw, 16px)',
                 lineHeight: '1.5'
               }}>
-                Toplanan verilerle ne yapmak istersiniz?
+                What would you like to do with the collected data?
               </p>
             </div>
 
@@ -1302,7 +1308,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                     alignItems: 'center',
                     gap: '8px'
                   }}>
-                    💪 Kollar
+                    💪 Arms
                   </h3>
                   <div style={{
                     background: 'rgba(59, 130, 246, 0.2)',
@@ -1432,14 +1438,14 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                     alignItems: 'center',
                     gap: '8px'
                   }}>
-                    💾 Eğitim Setini Kaydet
+                    💾 Save Training Set
                   </div>
                   <div style={{ 
                     fontSize: 'clamp(13px, 2vw, 14px)', 
                     color: '#d1d5db',
                     lineHeight: '1.5'
                   }}>
-                    Verileri kaydet. Model eğitimi için train_ml_models.py kullanın (bkz: TRAINING_GUIDE.md)
+                    Save data. For model training, use train_ml_models.py (see: TRAINING_GUIDE.md)
                   </div>
                 </button>
 
@@ -1529,14 +1535,14 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                     alignItems: 'center',
                     gap: '8px'
                   }}>
-                    ⏭️ Eğitim Setini Direkt Kaydetme
+                    ⏭️ Skip Saving Training Set
                   </div>
                   <div style={{ 
                     fontSize: 'clamp(13px, 2vw, 14px)', 
                     color: '#d1d5db',
                     lineHeight: '1.5'
                   }}>
-                    Verileri kaydetme, direkt geç
+                    Skip saving, proceed directly
                   </div>
                 </button>
               </div>
@@ -1803,7 +1809,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                 alignItems: 'center',
                 gap: '8px'
               }}>
-                💪 Kollar Feedback
+                💪 Arms Feedback
               </h3>
               <p style={{ 
                 fontSize: '0.9375rem', 
@@ -2670,8 +2676,8 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                           fontSize: 'clamp(10px, 1.3vw, 12px)',
                           color: '#9ca3af'
                         }}>
-                          <span>{rep.speedEmoji || '⚡'}</span>
-                          <span>{rep.speedLabel || 'Normal'}</span>
+                          <span>{rep.speedEmoji || '✅'}</span>
+                          <span>{rep.speedLabel || 'Medium'}</span>
                           <span style={{ color: '#6b7280' }}>({rep.duration?.toFixed(1) || '0.0'}s)</span>
                         </div>
                       </div>
@@ -2748,7 +2754,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                   marginBottom: '12px', 
                   color: '#fff' 
                 }}>
-                  📍 Bölgesel Feedback
+                  📍 Regional Feedback
                 </h4>
                 <div style={{ display: 'grid', gap: 'clamp(8px, 1.5vw, 10px)' }}>
                   {regionalFeedbacks.arms && (
@@ -2760,7 +2766,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                       fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
                       lineHeight: '1.5'
                     }}>
-                      <strong style={{ color: '#3b82f6' }}>💪 Kollar:</strong> {regionalFeedbacks.arms}
+                      <strong style={{ color: '#3b82f6' }}>💪 Arms:</strong> {regionalFeedbacks.arms}
                     </div>
                   )}
                   {regionalFeedbacks.legs && (
@@ -2772,7 +2778,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                       fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
                       lineHeight: '1.5'
                     }}>
-                      <strong style={{ color: '#a855f7' }}>🦵 Bacaklar:</strong> {regionalFeedbacks.legs}
+                      <strong style={{ color: '#a855f7' }}>🦵 Legs:</strong> {regionalFeedbacks.legs}
                     </div>
                   )}
                   {regionalFeedbacks.core && (
@@ -2784,7 +2790,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                       fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
                       lineHeight: '1.5'
                     }}>
-                      <strong style={{ color: '#f97316' }}>🏋️ Gövde:</strong> {regionalFeedbacks.core}
+                      <strong style={{ color: '#f97316' }}>🏋️ Core:</strong> {regionalFeedbacks.core}
                     </div>
                   )}
                   {regionalFeedbacks.head && (
@@ -2796,7 +2802,7 @@ export const WorkoutSessionWithIMU = ({ exercise, apiKey, avatarUrl, mlMode, onE
                       fontSize: 'clamp(0.75rem, 1.8vw, 0.8rem)',
                       lineHeight: '1.5'
                     }}>
-                      <strong style={{ color: '#22c55e' }}>👤 Kafa:</strong> {regionalFeedbacks.head}
+                      <strong style={{ color: '#22c55e' }}>👤 Head:</strong> {regionalFeedbacks.head}
                     </div>
                   )}
                 </div>

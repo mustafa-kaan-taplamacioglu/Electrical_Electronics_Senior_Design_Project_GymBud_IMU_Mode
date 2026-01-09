@@ -118,7 +118,7 @@ async def get_ai_feedback(
             # Exercise-specific system prompt
             if exercise == 'tricep_extensions':
                 system_prompt = """You are a professional fitness coach and exercise physiologist specializing in triceps training. 
-You provide scientifically-accurate, concise feedback in Turkish based on IMU sensor data.
+You provide scientifically-accurate, concise feedback in English based on IMU sensor data.
 You understand:
 - Triceps brachii anatomy (lateral, long, medial heads)
 - Optimal ROM for triceps activation (150-170°)
@@ -128,23 +128,23 @@ You understand:
 
 Provide 1-2 sentences of actionable, evidence-based feedback."""
             else:
-                system_prompt = 'You are a professional fitness coach. Provide concise, actionable feedback in Turkish.'
+                system_prompt = 'You are a professional fitness coach. Provide concise, actionable feedback in English.'
             
-            prompt = f"""Sen uzman bir fitness koçusun ve {ex_name} hareketini analiz ediyorsun.
+            prompt = f"""You are an expert fitness coach analyzing {ex_name} exercise.
 
-Rep #{rep_num} Analizi:
-- Form Skoru: {score:.1f}%
-- Geçerli Rep: {'Evet' if is_valid else 'Hayır'}
-- Tespit Edilen Sorunlar: {issues_text}{speed_info}{lw_rw_info}{scientific_context}
+Rep #{rep_num} Analysis:
+- Form Score: {score:.1f}%
+- Valid Rep: {'Yes' if is_valid else 'No'}
+- Detected Issues: {issues_text}{speed_info}{lw_rw_info}{scientific_context}
 {regional_info}{angle_info}
 
-KISA, BİLİMSEL ve AKSİYON ALINACAK feedback ver (Türkçe):
-1. Pozitif bir notla başla (skor düşük olsa bile)
-2. IMU verilerini yorumla (ROM, tempo, bilateral symmetry)
-3. Varsa en kritik sorunu belirt ve bilimsel düzeltme önerisi ver
-4. Teşvik edici bir cümleyle bitir
+Provide SHORT, SCIENTIFIC and ACTIONABLE feedback (in English):
+1. Start with a positive note (even if score is low)
+2. Interpret IMU data (ROM, tempo, bilateral symmetry)
+3. If there's a critical issue, mention it with scientific correction advice
+4. End with an encouraging sentence
 
-2 cümleyi geçme. Samimi, destekleyici ve bilimsel ol."""
+Keep it to 2 sentences max. Be friendly, supportive and scientific."""
 
             response = openai_client.chat.completions.create(
                 model='gpt-4o-mini',  # Faster and cheaper than gpt-4
@@ -344,56 +344,56 @@ async def get_imu_only_llm_feedback(
     tempo = imu_analysis.get('movement_quality', {}).get('tempo', {})
     
     imu_context = f"""
-📊 IMU SENSOR ANALİZİ (Biceps Curl - IMU-Only Mode):
+📊 IMU SENSOR ANALYSIS (Biceps Curl - IMU-Only Mode):
 
-SOL BİLEK (LW):
+LEFT WRIST (LW):
 - Pitch ROM: {lw.get('pitch_range', 'N/A')}° ({lw.get('pitch_feedback', 'N/A')})
 - Roll: {lw.get('roll_range', 'N/A')}° ({lw.get('roll_feedback', 'N/A')})
 - Yaw: {lw.get('yaw_range', 'N/A')}° ({lw.get('yaw_feedback', 'N/A')})
-- Max İvme: {lw.get('accel_max', 'N/A')} m/s²
-- Max Açısal Hız: {lw.get('gyro_max', 'N/A')}°/s ({lw.get('gyro_feedback', 'N/A')})
+- Max Accel: {lw.get('accel_max', 'N/A')} m/s²
+- Max Angular Velocity: {lw.get('gyro_max', 'N/A')}°/s ({lw.get('gyro_feedback', 'N/A')})
 
-SAĞ BİLEK (RW):
+RIGHT WRIST (RW):
 - Pitch ROM: {rw.get('pitch_range', 'N/A')}° ({rw.get('pitch_feedback', 'N/A')})
 - Roll: {rw.get('roll_range', 'N/A')}° ({rw.get('roll_feedback', 'N/A')})
 - Yaw: {rw.get('yaw_range', 'N/A')}° ({rw.get('yaw_feedback', 'N/A')})
-- Max İvme: {rw.get('accel_max', 'N/A')} m/s²
-- Max Açısal Hız: {rw.get('gyro_max', 'N/A')}°/s ({rw.get('gyro_feedback', 'N/A')})
+- Max Accel: {rw.get('accel_max', 'N/A')} m/s²
+- Max Angular Velocity: {rw.get('gyro_max', 'N/A')}°/s ({rw.get('gyro_feedback', 'N/A')})
 
-BİLATERAL SİMETRİ:
-- Durum: {symmetry.get('feedback', 'N/A')}
-- Pitch Fark: {symmetry.get('pitch_diff_pct', 'N/A')}%
+BILATERAL SYMMETRY:
+- Status: {symmetry.get('feedback', 'N/A')}
+- Pitch Diff: {symmetry.get('pitch_diff_pct', 'N/A')}%
 
 TEMPO:
 - {tempo.get('feedback', 'N/A')}
 
-🔬 BİLİMSEL BAĞLAM:
-- Optimal ROM: 120-150° (dirsek açısı)
-- Optimal Tempo: 2-3 saniye (TUT - Time Under Tension)
-- Dirsek sabitliği kritik (sadece ön kol hareket etmeli)
-- Bilateral simetri kas dengesizliğini önler
+🔬 SCIENTIFIC CONTEXT:
+- Optimal ROM: 120-150° (elbow angle)
+- Optimal Tempo: 2-3 seconds (TUT - Time Under Tension)
+- Elbow stability is critical (only forearm should move)
+- Bilateral symmetry prevents muscle imbalance
 """
     
-    prompt = f"""Sen uzman bir fitness koçusun. IMU-only mode'da biceps curl analizi yapıyorsun.
+    prompt = f"""You are an expert fitness coach. Analyzing biceps curl in IMU-only mode.
 
-Rep #{rep_data.get('rep', 0)} Analizi:
-- Form Skoru: {rep_data.get('form_score', 0):.1f}%
-- Rep Süresi: {rep_data.get('duration', 0):.1f} saniye
+Rep #{rep_data.get('rep', 0)} Analysis:
+- Form Score: {rep_data.get('form_score', 0):.1f}%
+- Rep Duration: {rep_data.get('duration', 0):.1f} seconds
 {imu_context}
 
-KISA, BİLİMSEL ve AKSİYON ALINACAK feedback ver (Türkçe, 2-3 cümle):
-1. Pozitif başla
-2. IMU verilerini yorumla (sol/sağ bilek, simetri, tempo)
-3. Bilimsel gerçekleri kullan
-4. Kritik sorun varsa belirt
-5. Teşvik edici bitir"""
+Provide SHORT, SCIENTIFIC and ACTIONABLE feedback (in English, 2-3 sentences):
+1. Start positive
+2. Interpret IMU data (left/right wrist, symmetry, tempo)
+3. Use scientific facts
+4. Mention critical issues if any
+5. End with encouragement"""
 
-    system_prompt = """Sen bir fitness koçusun. IMU-only mode'da sadece sensör verilerini kullanarak analiz yapıyorsun.
-Biceps curl bilimsel gerçekleri:
+    system_prompt = """You are a fitness coach. In IMU-only mode, you analyze using only sensor data.
+Biceps curl scientific facts:
 - Optimal ROM: 120-150°
-- Optimal tempo: 2-3 saniye
-- Bilateral simetri önemli
-- Bilek stabilitesi kritik"""
+- Optimal tempo: 2-3 seconds
+- Bilateral symmetry is important
+- Wrist stability is critical"""
 
     try:
         response = openai_client.chat.completions.create(
@@ -481,7 +481,7 @@ async def get_session_feedback(exercise: str, reps_data: list, all_issues: list)
     """Get comprehensive feedback at session end. Uses OpenAI if available, otherwise rule-based."""
     
     if not reps_data:
-        return "Henüz rep tamamlanmadı. Devam et, daha uzun süre yapmaya çalış!"
+        return "No reps completed yet. Keep going, try to work out longer!"
     
     total_reps = len(reps_data)
     avg_score = sum(r['form_score'] for r in reps_data) / total_reps
@@ -618,15 +618,15 @@ async def get_session_feedback(exercise: str, reps_data: list, all_issues: list)
 - Most Common Issues: {top_issues_text}
 {imu_context}
 
-Provide comprehensive, scientifically-accurate feedback in Turkish:
+Provide comprehensive, scientifically-accurate feedback in English:
 1. Congratulate them for completing the workout
 2. Analyze their performance using the IMU sensor data (ROM, tempo, bilateral symmetry)
 3. Provide 2-3 specific, actionable improvement recommendations based on:
-   - Range of Motion (ROM) analysis - triceps activation
+   - Range of Motion (ROM) analysis - muscle activation
    - Tempo/TUT (Time Under Tension) - muscle hypertrophy optimization
    - Bilateral symmetry - muscle balance
    - Form quality - elbow stability, full extension
-4. Include scientific rationale (e.g., "Triceps'in 3 başı da tam aktive olması için...")
+4. Include scientific rationale (e.g., "To fully activate all 3 heads of the triceps...")
 5. Motivating closing message
 
 Keep it friendly, professional, scientifically accurate, and under 6-8 sentences. Focus on actionable, evidence-based advice."""
@@ -634,7 +634,7 @@ Keep it friendly, professional, scientifically accurate, and under 6-8 sentences
             # Exercise-specific system prompt
             if exercise == 'bicep_curls':
                 system_prompt = f"""You are a professional fitness coach and exercise physiologist specializing in biceps training. 
-You provide scientifically-accurate, evidence-based feedback in Turkish. 
+You provide scientifically-accurate, evidence-based feedback in English. 
 You understand:
 - Biceps brachii anatomy (short head and long head)
 - Optimal ROM for biceps activation (120-150°)
@@ -645,7 +645,7 @@ You understand:
 Always provide specific, actionable advice based on IMU sensor data analysis."""
             elif exercise == 'tricep_extensions':
                 system_prompt = f"""You are a professional fitness coach and exercise physiologist specializing in triceps training. 
-You provide scientifically-accurate, evidence-based feedback in Turkish. 
+You provide scientifically-accurate, evidence-based feedback in English. 
 You understand:
 - Triceps brachii anatomy (lateral, long, medial heads)
 - Optimal ROM for triceps activation (150-170°)
@@ -655,7 +655,7 @@ You understand:
 
 Always provide specific, actionable advice based on IMU sensor data analysis."""
             else:
-                system_prompt = """You are a professional fitness coach. Provide scientifically-accurate, evidence-based feedback in Turkish."""
+                system_prompt = """You are a professional fitness coach. Provide scientifically-accurate, evidence-based feedback in English."""
 
             response = openai_client.chat.completions.create(
                 model='gpt-4o-mini',

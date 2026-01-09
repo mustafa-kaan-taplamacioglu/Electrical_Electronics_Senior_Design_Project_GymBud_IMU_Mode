@@ -492,9 +492,9 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                     pitch_diff = abs(lw_pitch_range - rw_pitch_range)
                                                                     if pitch_diff > 20:
                                                                         if lw_pitch_range > rw_pitch_range:
-                                                                            form_result['regional_issues']['arms'] = form_result['regional_issues'].get('arms', []) + [f'Sol kol daha geniş hareket ediyor ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)']
+                                                                            form_result['regional_issues']['arms'] = form_result['regional_issues'].get('arms', []) + [f'Left arm has wider range of motion ({lw_pitch_range:.0f}° vs {rw_pitch_range:.0f}°)']
                                                                         else:
-                                                                            form_result['regional_issues']['arms'] = form_result['regional_issues'].get('arms', []) + [f'Sağ kol daha geniş hareket ediyor ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)']
+                                                                            form_result['regional_issues']['arms'] = form_result['regional_issues'].get('arms', []) + [f'Right arm has wider range of motion ({rw_pitch_range:.0f}° vs {lw_pitch_range:.0f}°)']
                                                             elif ml_inference_instance and ml_inference_instance.has_imu_model():
                                                                 # Fallback to ML model
                                                                 try:
@@ -644,6 +644,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                                 'right_wrist': rw_data,
                                                                                 'speed_class': speed_class,
                                                                                 'speed_label': speed_label,
+                                                                                'speed_emoji': speed_emoji,
                                                                                 'duration': rep_duration
                                                                             }
                                                                         })
@@ -696,6 +697,8 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                                 'is_valid': True,
                                                                                 'regional_scores': regional_scores,
                                                                                 'speed_class': speed_class,
+                                                                                'speed_label': speed_label,
+                                                                                'speed_emoji': speed_emoji,
                                                                                 'duration': rep_duration
                                                                             }
                                                                         })
@@ -816,13 +819,20 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                                 else:
                                                                     regional_issues_summary[region] = []
                                                             
+                                                            # Calculate avg_form for feedback fallback
+                                                            avg_form = round(
+                                                                sum(r['form_score'] for r in active_session['reps_data']) / len(active_session['reps_data'])
+                                                                if active_session.get('reps_data') else 0, 1
+                                                            )
+                                                            
                                                             regional_feedbacks = {}
                                                             for region in ['arms', 'legs', 'core', 'head']:
-                                                                region_score = avg_regional_scores.get(region, 100)
+                                                                region_score = avg_regional_scores.get(region, 0)
                                                                 region_issues = regional_issues_summary.get(region, [])
                                                                 regional_feedbacks[region] = get_rule_based_regional_feedback(
                                                                     exercise, region, region_score, region_issues,
-                                                                    rep_num=len(active_session.get('reps_data', [])), min_angle=None, max_angle=None
+                                                                    rep_num=len(active_session.get('reps_data', [])), min_angle=None, max_angle=None,
+                                                                    fallback_score=avg_form
                                                                 )
                                                             
                                                             # Send session summary
@@ -830,10 +840,7 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                                             summary_data = {
                                                                 'type': 'session_summary',
                                                                 'total_reps': total_reps,
-                                                                'avg_form': round(
-                                                                    sum(r['form_score'] for r in active_session['reps_data']) / len(active_session['reps_data'])
-                                                                    if active_session.get('reps_data') else 0, 1
-                                                                ),
+                                                                'avg_form': avg_form,
                                                                 'regional_scores': avg_regional_scores,
                                                                 'regional_feedback': regional_feedbacks,
                                                                 'feedback': session_feedback,
@@ -1620,82 +1627,86 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     regional_issues_summary[region] = [top_issue] if top_issue else []
                                 else:
                                     regional_issues_summary[region] = []
-                                
-                                # Generate regional feedback using rule-based feedback
-                                regional_feedbacks = {}
-                                for region in ['arms', 'legs', 'core', 'head']:
-                                    region_score = avg_regional_scores.get(region, 100)
-                                    region_issues = regional_issues_summary.get(region, [])
-                                    regional_feedbacks[region] = get_rule_based_regional_feedback(
-                                        exercise, region, region_score, region_issues,
-                                        rep_num=len(session['reps_data']), min_angle=None, max_angle=None
-                                    )
-                                
-                                # Send session summary
-                                # Use total_reps_in_session for IMU-only mode (reps_data may be empty)
-                                total_reps = session.get('total_reps_in_session', len(session.get('reps_data', [])))
-                                
-                                # Prepare rep list with scores and speeds
-                                rep_list = []
-                                for rep_data in session.get('reps_data', []):
-                                    rep_list.append({
-                                        'rep_number': rep_data.get('rep', 0),
-                                        'form_score': round(rep_data.get('form_score', 0), 1),
-                                        'duration': round(rep_data.get('duration', 0), 2),
-                                        'speed_class': rep_data.get('speed_class', 'medium'),
-                                        'speed_label': rep_data.get('speed_label', 'Orta Hız'),
-                                        'speed_emoji': rep_data.get('speed_emoji', '✅'),
-                                        'is_valid': rep_data.get('is_valid', True),
-                                        'regional_scores': rep_data.get('regional_scores', {}),
-                                        'issues': rep_data.get('issues', [])
-                                    })
-                                
-                                summary_data = {
-                                    'type': 'session_summary',
-                                    'total_reps': total_reps,
-                                    'avg_form': round(
-                                        sum(r['form_score'] for r in session['reps_data']) / len(session['reps_data'])
-                                        if session['reps_data'] else 0, 1
-                                    ),
-                                    'regional_scores': avg_regional_scores,
-                                    'regional_feedback': regional_feedbacks,  # Add regional feedback
-                                    'feedback': session_feedback,
-                                    'rep_list': rep_list,  # Add rep list with scores and speeds
-                                    'workout_complete': True,
-                                    'message': 'Workout completed automatically! All sets and reps finished.'
-                                }
-                                
-                                # Add rep completion info to response before sending
-                                response['rep_completed'] = rep_result
-                                response['rep_valid'] = rep_result.get('is_valid', True)
-                                response['rep_feedback'] = rep_result.get('feedback', '')
-                                response['workout_complete'] = True
-                                # Add ML inference scores to response
-                                response['ml_prediction'] = rep_result.get('ml_prediction')
-                                response['baseline_similarity'] = rep_result.get('baseline_similarity')
-                                response['hybrid_score'] = rep_result.get('hybrid_score')
-                                
-                                # Workout tamamlandığında veriyi henüz kaydetME - kullanıcıya sor
-                                # Data is NOT saved here - user will decide via training dialog
-                                ml_mode = session.get('ml_mode', 'usage')
-                                collected_count = session.get('collected_reps_count', 0)
-                                
-                                # Add ml_mode and collected_count to summary for dialog
-                                summary_data['ml_mode'] = ml_mode
-                                summary_data['collected_count'] = collected_count
-                                summary_data['show_training_dialog'] = True  # Always show dialog
-                                
-                                # Log data status
-                                if ml_mode == 'train':
-                                    camera_collector = camera_training_collectors.get(exercise)
-                                    imu_collector = imu_training_collectors.get(exercise)
-                                    camera_samples = len(camera_collector.current_samples) if camera_collector else 0
-                                    imu_samples = len(imu_collector.current_samples) if imu_collector else 0
-                                    session_landmarks_count = len(session.get('session_landmarks', []))
-                                    session_imu_count = len(session.get('session_imu_samples', []))
-                                    print(f"📊 Train mode data ready (NOT saved yet - waiting for user decision):")
-                                    print(f"   Camera collector: {camera_samples} rep samples + {session_landmarks_count} session frames")
-                                    print(f"   IMU collector: {imu_samples} rep sequences + {session_imu_count} session samples")
+                            
+                            # Calculate avg_form for feedback fallback
+                            avg_form = round(
+                                sum(r['form_score'] for r in session['reps_data']) / len(session['reps_data'])
+                                if session['reps_data'] else 0, 1
+                            )
+                            
+                            # Generate regional feedback using rule-based feedback
+                            regional_feedbacks = {}
+                            for region in ['arms', 'legs', 'core', 'head']:
+                                region_score = avg_regional_scores.get(region, 0)
+                                region_issues = regional_issues_summary.get(region, [])
+                                regional_feedbacks[region] = get_rule_based_regional_feedback(
+                                    exercise, region, region_score, region_issues,
+                                    rep_num=len(session['reps_data']), min_angle=None, max_angle=None,
+                                    fallback_score=avg_form
+                                )
+                            
+                            # Send session summary
+                            # Use total_reps_in_session for IMU-only mode (reps_data may be empty)
+                            total_reps = session.get('total_reps_in_session', len(session.get('reps_data', [])))
+                            
+                            # Prepare rep list with scores and speeds
+                            rep_list = []
+                            for rep_data in session.get('reps_data', []):
+                                rep_list.append({
+                                    'rep_number': rep_data.get('rep', 0),
+                                    'form_score': round(rep_data.get('form_score', 0), 1),
+                                    'duration': round(rep_data.get('duration', 0), 2),
+                                    'speed_class': rep_data.get('speed_class', 'medium'),
+                                    'speed_label': rep_data.get('speed_label', 'Medium'),
+                                    'speed_emoji': rep_data.get('speed_emoji', '✅'),
+                                    'is_valid': rep_data.get('is_valid', True),
+                                    'regional_scores': rep_data.get('regional_scores', {}),
+                                    'issues': rep_data.get('issues', [])
+                                })
+                            
+                            summary_data = {
+                                'type': 'session_summary',
+                                'total_reps': total_reps,
+                                'avg_form': avg_form,
+                                'regional_scores': avg_regional_scores,
+                                'regional_feedback': regional_feedbacks,
+                                'feedback': session_feedback,
+                                'rep_list': rep_list,
+                                'workout_complete': True,
+                                'message': 'Workout completed automatically! All sets and reps finished.'
+                            }
+                            
+                            # Add rep completion info to response before sending
+                            response['rep_completed'] = rep_result
+                            response['rep_valid'] = rep_result.get('is_valid', True)
+                            response['rep_feedback'] = rep_result.get('feedback', '')
+                            response['workout_complete'] = True
+                            # Add ML inference scores to response
+                            response['ml_prediction'] = rep_result.get('ml_prediction')
+                            response['baseline_similarity'] = rep_result.get('baseline_similarity')
+                            response['hybrid_score'] = rep_result.get('hybrid_score')
+                            
+                            # Workout tamamlandığında veriyi henüz kaydetME - kullanıcıya sor
+                            # Data is NOT saved here - user will decide via training dialog
+                            ml_mode = session.get('ml_mode', 'usage')
+                            collected_count = session.get('collected_reps_count', 0)
+                            
+                            # Add ml_mode and collected_count to summary for dialog
+                            summary_data['ml_mode'] = ml_mode
+                            summary_data['collected_count'] = collected_count
+                            summary_data['show_training_dialog'] = True  # Always show dialog
+                            
+                            # Log data status
+                            if ml_mode == 'train':
+                                camera_collector = camera_training_collectors.get(exercise)
+                                imu_collector = imu_training_collectors.get(exercise)
+                                camera_samples = len(camera_collector.current_samples) if camera_collector else 0
+                                imu_samples = len(imu_collector.current_samples) if imu_collector else 0
+                                session_landmarks_count = len(session.get('session_landmarks', []))
+                                session_imu_count = len(session.get('session_imu_samples', []))
+                                print(f"📊 Train mode data ready (NOT saved yet - waiting for user decision):")
+                                print(f"   Camera collector: {camera_samples} rep samples + {session_landmarks_count} session frames")
+                                print(f"   IMU collector: {imu_samples} rep sequences + {session_imu_count} session samples")
 
                             # Send final rep update
                             try:
@@ -1703,18 +1714,18 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                                     await websocket.send_json(response)
                             except (RuntimeError, WebSocketDisconnect, AttributeError):
                                 pass
-                                
-                                # Send session summary
-                                try:
-                                    if websocket.client_state.name == 'CONNECTED':
-                                        await websocket.send_json(summary_data)
-                                        print(f"📤 Sent automatic session_summary: total_reps={summary_data['total_reps']}, workout_complete=True")
-                                except (RuntimeError, WebSocketDisconnect, AttributeError):
-                                    pass
-                                
-                                # Don't continue processing - session is finished (handled above in workout complete check)
-                                continue
-                            else:
+                            
+                            # Send session summary
+                            try:
+                                if websocket.client_state.name == 'CONNECTED':
+                                    await websocket.send_json(summary_data)
+                                    print(f"📤 Sent automatic session_summary: total_reps={summary_data['total_reps']}, workout_complete=True")
+                            except (RuntimeError, WebSocketDisconnect, AttributeError):
+                                pass
+                            
+                            # Don't continue processing - session is finished (handled above in workout complete check)
+                            continue
+                        else:
                                 # More sets to go - start rest period
                                 session['state'] = 'resting'
                                 rest_time = session.get('workout_config', {}).get('restTimeSeconds', 60)
@@ -1993,16 +2004,6 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                         else:
                             regional_issues_summary[region] = []
                     
-                    # Generate regional feedback using rule-based feedback
-                    regional_feedbacks = {}
-                    for region in ['arms', 'legs', 'core', 'head']:
-                        region_score = avg_regional_scores.get(region, 100)
-                        region_issues = regional_issues_summary.get(region, [])
-                        regional_feedbacks[region] = get_rule_based_regional_feedback(
-                            exercise, region, region_score, region_issues,
-                            rep_num=len(session['reps_data']), min_angle=None, max_angle=None
-                        )
-                    
                     # Use total_reps_in_session for IMU-only mode (reps_data may be empty)
                     total_reps = session.get('total_reps_in_session', len(session.get('reps_data', [])))
                     
@@ -2015,6 +2016,17 @@ async def websocket_endpoint(websocket: WebSocket, exercise: str):
                     elif session.get('latest_form_score'):
                         # Fallback: use latest form score if no reps_data
                         avg_form = round(float(session['latest_form_score']), 1)
+                    
+                    # Generate regional feedback using rule-based feedback
+                    regional_feedbacks = {}
+                    for region in ['arms', 'legs', 'core', 'head']:
+                        region_score = avg_regional_scores.get(region, 0)
+                        region_issues = regional_issues_summary.get(region, [])
+                        regional_feedbacks[region] = get_rule_based_regional_feedback(
+                            exercise, region, region_score, region_issues,
+                            rep_num=len(session['reps_data']), min_angle=None, max_angle=None,
+                            fallback_score=avg_form
+                        )
                     
                     summary_data = {
                         'type': 'session_summary',

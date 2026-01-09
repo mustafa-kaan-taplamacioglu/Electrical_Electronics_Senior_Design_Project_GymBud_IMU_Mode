@@ -323,32 +323,32 @@ EXERCISE_CONFIGS = {
     }
 }
 
-# Speed feedback in Turkish (shared across exercises)
+# Speed feedback (shared across exercises)
 SPEED_FEEDBACK_TR = {
     'very_fast': {
-        'label': 'Çok Hızlı',
+        'label': 'Very Fast',
         'emoji': '🚀',
-        'feedback': 'Çok hızlı yapıyorsun! Yavaşlatarak kasları daha iyi hisset.'
+        'feedback': 'Too fast! Slow down to feel the muscles better.'
     },
     'fast': {
-        'label': 'Hızlı',
+        'label': 'Fast',
         'emoji': '⚡',
-        'feedback': 'Hızlı tempo, formunu koruyarak devam et.'
+        'feedback': 'Fast tempo - maintain proper form.'
     },
     'medium': {
-        'label': 'Orta Hız',
+        'label': 'Medium',
         'emoji': '✅',
-        'feedback': 'İdeal tempo! Bu hızda devam et.'
+        'feedback': 'Ideal tempo! Keep this pace.'
     },
     'slow': {
-        'label': 'Yavaş',
+        'label': 'Slow',
         'emoji': '🐢',
-        'feedback': 'Yavaş ve kontrollü - kasları iyi hissediyorsun.'
+        'feedback': 'Slow and controlled - good muscle engagement.'
     },
     'very_slow': {
-        'label': 'Çok Yavaş',
+        'label': 'Very Slow',
         'emoji': '🦥',
-        'feedback': 'Çok yavaş yapıyorsun. Biraz hızlandırabilirsin.'
+        'feedback': 'Too slow. Try to speed up a bit.'
     }
 }
 

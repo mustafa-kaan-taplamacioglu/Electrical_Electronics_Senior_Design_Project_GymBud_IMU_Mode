@@ -23,6 +23,12 @@ export type RepData = {
   formScore: number;
   issues: string[];
   timestamp: Date;
+  duration?: number;
+  speedClass?: string;
+  speedLabel?: string;
+  speedEmoji?: string;
+  isValid?: boolean;
+  regionalScores?: Record<string, any>;
 }
 
 export type SessionData = {
